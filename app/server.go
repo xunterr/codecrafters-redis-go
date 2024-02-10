@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	// Uncomment this block to pass the first stage
 	"net"
 	"os"
 )
@@ -45,9 +44,6 @@ func handle(c net.Conn){
 
     buf = buf[:size]
     resp := parseResp(buf)
-    for _, e := range resp{
-      fmt.Println(len(e))
-    }
     handleCmd(c, resp)
   }
    
