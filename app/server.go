@@ -1,9 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	// Uncomment this block to pass the first stage
 	"net"
@@ -11,14 +12,12 @@ import (
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
-	
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+  
   for{
     c, err := l.Accept()
     fmt.Println("Accepted")
@@ -35,19 +34,51 @@ func main() {
 
 func handle(c net.Conn){
   for {
-    _, err := bufio.NewReader(c).ReadString('\n') 
+    var buf []byte = make([]byte, 1024)
+    _, err := c.Read(buf) 
+
     if err != nil{
       io.WriteString(c, "Error reading request!")
       return
     }
-    io.WriteString(c, "+PONG\r\n")
+    
+    resp := parseResp(buf)
+    handleCmd(c, resp)
   }
    
 }
 
-func process(c net.Conn, cmd string){
-  switch cmd{
-  case "ping":
-    io.WriteString(c, "+PONG\r\n")
+func parseResp(req []byte) []string{
+  args := strings.Split(string(req), "\r\n")
+  length := 1
+  values := make([]string, length)
+
+  for i := 0; i<len(args); i++{
+    tokens := strings.Split(args[i], "")
+    format := tokens[0]
+    data := strings.Join(tokens[1:], "")
+
+    switch format{
+    case "*":
+      length, _ = strconv.Atoi(data)
+      values = make([]string, length)
+      i--
+    case "$":
+      str := args[i+1]
+      ln, _ := strconv.Atoi(data)
+      values[i] = str[:ln]
+    }
+  }
+  return values
+}
+
+func handleCmd(c net.Conn, cmd []string){
+  for i := 0; i<len(cmd); i++{
+    switch strings.ToLower(cmd[i]){
+    case "ping":
+      io.WriteString(c, "+PONG\r\n")
+    case "echo":
+      io.WriteString(c, fmt.Sprintf("+%s\r\n"))
+    }
   }
 }
