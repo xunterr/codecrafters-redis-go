@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 
@@ -20,7 +21,7 @@ func main() {
 	}
   for{
     c, err := l.Accept()
-    
+    fmt.Println("Accepted")
     if err != nil {
       fmt.Println("Error accepting connection: ", err.Error())
       os.Exit(1)
@@ -34,7 +35,7 @@ func main() {
 
 func handle(c net.Conn){
   for {
-    _, err := io.ReadAll(c)
+    _, err := bufio.NewReader(c).ReadString('\n') 
     if err != nil{
       io.WriteString(c, "Error reading request!")
       return
