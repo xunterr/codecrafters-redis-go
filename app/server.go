@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	// Uncomment this block to pass the first stage
 	"net"
 	"os"
@@ -16,9 +17,11 @@ func main() {
 	 	fmt.Println("Failed to bind to port 6379")
 	 	os.Exit(1)
 	 }
-	 _, err = l.Accept()
+   c, err := l.Accept()
 	 if err != nil {
 	 	fmt.Println("Error accepting connection: ", err.Error())
 	 	os.Exit(1)
 	 }
+
+   io.WriteString(c, "+PONG\r\n")
 }
