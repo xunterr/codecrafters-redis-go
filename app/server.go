@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 
@@ -35,25 +36,35 @@ func main() {
 func handle(c net.Conn){
   for {
     var buf []byte = make([]byte, 1024)
-    _, err := c.Read(buf) 
+    size, err := c.Read(buf) 
 
     if err != nil{
       io.WriteString(c, "Error reading request!")
       return
     }
-    
+
+    buf = buf[:size]
     resp := parseResp(buf)
+    for _, e := range resp{
+      fmt.Println(len(e))
+    }
     handleCmd(c, resp)
   }
    
 }
 
 func parseResp(req []byte) []string{
-  args := strings.Split(string(req), "\r\n")
+  req = []byte(strings.TrimSpace(string(req)))
+  log.Printf("Request received: %s, length = %d", string(req), len(string(req)))
+  strReq := string(req)
+  args := strings.Split(strReq, "\r\n")
   length := 1
   values := make([]string, length)
 
-  for i := 0; i<len(args); i++{
+  log.Printf("RESP args length: %d\n", len(args))
+  for i,j := 0,0; i<len(args); i,j = i+1, j+1{
+
+    log.Printf("RESP args: %s\n", args[i])
     tokens := strings.Split(args[i], "")
     format := tokens[0]
     data := strings.Join(tokens[1:], "")
@@ -61,14 +72,16 @@ func parseResp(req []byte) []string{
     switch format{
     case "*":
       length, _ = strconv.Atoi(data)
+      log.Printf("RESP array length: %d\n", length)
       values = make([]string, length)
-      i--
+      j--
     case "$":
       str := args[i+1]
       ln, _ := strconv.Atoi(data)
-      values[i] = str[:ln]
+      values[j] = str[:ln]
     default:
-      values[i] = args[i]
+      fmt.Printf("Args at %d: %s", i, args[i])
+      values[j] = args[i]
     }
   }
   return values
@@ -76,11 +89,11 @@ func parseResp(req []byte) []string{
 
 func handleCmd(c net.Conn, cmd []string){
   for i := 0; i<len(cmd); i++{
-    switch strings.ToLower(cmd[i]){
+    switch strings.ToLower(strings.TrimSpace(cmd[i])){
     case "ping":
       io.WriteString(c, "+PONG\r\n")
     case "echo":
-      io.WriteString(c, fmt.Sprintf("+%s\r\n"))
+      io.WriteString(c, fmt.Sprintf("+%s\r\n", cmd[i+1]))
     }
   }
 }
