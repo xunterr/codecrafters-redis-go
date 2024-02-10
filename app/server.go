@@ -80,6 +80,7 @@ func parseResp(req []byte) []string{
       ln, _ := strconv.Atoi(data)
       values[j] = str[:ln]
     default:
+      fmt.Println(len(args))
       fmt.Printf("Args at %d: %s", i, args[i])
       values[j] = args[i]
     }
