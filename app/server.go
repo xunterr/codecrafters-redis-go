@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
+	
 	"strconv"
 	"strings"
 
@@ -54,17 +54,12 @@ func handle(c net.Conn){
 }
 
 func parseResp(req []byte) []string{
-  req = []byte(strings.TrimSpace(string(req)))
-  log.Printf("Request received: %s, length = %d", string(req), len(string(req)))
-  strReq := string(req)
+  strReq := strings.TrimSpace(string(req))
   args := strings.Split(strReq, "\r\n")
   length := 1
   values := make([]string, length)
 
-  log.Printf("RESP args length: %d\n", len(args))
-  for i,j := 0,0; i<len(args); i,j = i+1, j+1{
-
-    log.Printf("RESP args: %s\n", args[i])
+  for i := 0; i<len(args); i++{
     tokens := strings.Split(args[i], "")
     format := tokens[0]
     data := strings.Join(tokens[1:], "")
@@ -72,18 +67,14 @@ func parseResp(req []byte) []string{
     switch format{
     case "*":
       length, _ = strconv.Atoi(data)
-      log.Printf("RESP array length: %d\n", length)
       values = make([]string, length)
-      j--
     case "$":
       str := args[i+1]
       ln, _ := strconv.Atoi(data)
-      values[j] = str[:ln]
+      values = append(values, str[:ln]) 
       i++
     default:
-      fmt.Println(len(args))
-      fmt.Printf("Args at %d: %s", i, args[i])
-      values[j] = args[i]
+      values = append(values, args[i])
     }
   }
   return values
