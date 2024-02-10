@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+
 	// Uncomment this block to pass the first stage
 	"net"
 	"os"
@@ -24,7 +25,28 @@ func main() {
       fmt.Println("Error accepting connection: ", err.Error())
       os.Exit(1)
     }
-    defer c.Close()
-    go io.WriteString(c, "+PONG\r\n")
+    go func(c net.Conn){
+      handle(c)
+      c.Close()
+    }(c)
+  }
+}
+
+func handle(c net.Conn){
+  for {
+    _, err := io.ReadAll(c)
+    if err != nil{
+      io.WriteString(c, "Error reading request!")
+      return
+    }
+    io.WriteString(c, "+PONG\r\n")
+  }
+   
+}
+
+func process(c net.Conn, cmd string){
+  switch cmd{
+  case "ping":
+    io.WriteString(c, "+PONG\r\n")
   }
 }
