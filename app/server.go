@@ -67,6 +67,8 @@ func parseResp(req []byte) []string{
       str := args[i+1]
       ln, _ := strconv.Atoi(data)
       values[i] = str[:ln]
+    default:
+      values[i] = args[i]
     }
   }
   return values
