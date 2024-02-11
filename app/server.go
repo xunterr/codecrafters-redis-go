@@ -119,11 +119,7 @@ func handleCmd(c net.Conn, cmd []string){
         continue
       }
 
-      v, err := get(cmd[i+1])
-      if err != nil{
-        writeMessage(c, err.Error())
-        continue
-      }
+      v := get(cmd[i+1]) 
       writeMessage(c, v)
     }
   }
@@ -158,10 +154,7 @@ func set(key string, value string) error{
   return nil
 }
 
-func get(key string) (string, error){ 
-  value, ok := storage[key] 
-  if !ok{
-    return "", errors.New("No such key")
-  }
-  return value, nil
+func get(key string) string{ 
+  value, _ := storage[key]  
+  return value
 }
