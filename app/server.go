@@ -120,7 +120,7 @@ func handleCmd(c net.Conn, cmd []string){
       v, err := get(cmd[i+1]) 
       if err != nil{
         log.Println("error")
-        io.WriteString(c, "")
+        io.WriteString(c, "\r\n")
         continue
       }
       writeMessage(c, v)
