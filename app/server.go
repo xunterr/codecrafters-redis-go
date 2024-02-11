@@ -16,7 +16,6 @@ import (
 
 var(
   storage map[string]string = make(map[string]string)
-  expiry map[string]time.Time = make(map[string]time.Time)
 )
 
 func main() {
@@ -120,6 +119,7 @@ func handleCmd(c net.Conn, cmd []string){
       }
       v, err := get(cmd[i+1]) 
       if err != nil{
+        c.Write([]byte(v))
         continue
       }
       writeMessage(c, v)
