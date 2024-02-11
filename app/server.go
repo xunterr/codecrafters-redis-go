@@ -104,12 +104,12 @@ func handleCmd(c net.Conn, cmd []string){
           continue
         }
         err = setWithTimer(cmd[i+1], cmd[i+2], expire)
-        continue
-      }
-      err := set(cmd[i+1], cmd[i+2])
-      if err != nil{
-        writeMessage(c, err.Error())
-        continue
+      } else {
+        err := set(cmd[i+1], cmd[i+2])
+        if err != nil{
+          writeMessage(c, err.Error())
+          continue
+        }
       }
       writeMessage(c, "OK")
 
