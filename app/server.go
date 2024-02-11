@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 var(
   storage map[string]string = make(map[string]string)
+  expiry map[string]time.Time = make(map[string]time.Time)
 )
 
 func main() {
@@ -93,6 +95,16 @@ func handleCmd(c net.Conn, cmd []string){
         writeMessage(c, "Not enough arguments")
         continue
       }
+      
+      if len(cmd) > i+4 && strings.ToLower(cmd[i+3]) == "px"{
+        expire, err := strconv.Atoi(cmd[i+4])
+        if err != nil{
+          writeMessage(c, "Wrong time format")
+          continue
+        }
+        err = setWithTimer(cmd[i+1], cmd[i+2], expire)
+
+      }
       err := set(cmd[i+1], cmd[i+2])
       if err != nil{
         writeMessage(c, err.Error())
@@ -120,6 +132,21 @@ func writeMessage(c net.Conn, msg string){
   io.WriteString(c, fmt.Sprintf("+%s\r\n", msg))
 }
 
+func setWithTimer(key string, value string, expire int) error {
+  err := set(key, value)
+  if err != nil{
+    return err
+  }
+  
+  go func(expire int, key string){
+    expiryMs := time.Millisecond * time.Duration(expire)
+    timer := time.After(expiryMs)
+    <-timer
+    delete(storage, key)
+  }(expire, key)
+  return nil
+}
+
 func set(key string, value string) error{
   if _, ok := storage[key]; ok{
     return errors.New("Key already exists") 
@@ -128,7 +155,7 @@ func set(key string, value string) error{
   return nil
 }
 
-func get(key string) (string, error){
+func get(key string) (string, error){ 
   value, ok := storage[key] 
   if !ok{
     return "", errors.New("No such key")
