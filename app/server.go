@@ -98,7 +98,7 @@ func handleCmd(c net.Conn, cmd []string){
         writeMessage(c, err.Error())
         continue
       }
-      writeMessage(c, cmd[i+1])
+      writeMessage(c, "OK")
 
     case "get":
       if len(cmd) <= i+1 {
