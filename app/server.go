@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	"strconv"
@@ -141,7 +142,9 @@ func setWithTimer(key string, value string, expire int) error {
   go func(expire int, key string){
     expiryMs := time.Millisecond * time.Duration(expire)
     timer := time.After(expiryMs)
+    log.Printf("Expiry (ms): %d", expire)
     <-timer
+    log.Println("Expired")
     delete(storage, key)
   }(expire, key)
   return nil
