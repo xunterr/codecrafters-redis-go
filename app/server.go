@@ -1,14 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	
+
 	"strconv"
 	"strings"
 
 	"net"
 	"os"
+)
+
+var(
+  storage map[string]string = make(map[string]string)
 )
 
 func main() {
@@ -83,6 +88,50 @@ func handleCmd(c net.Conn, cmd []string){
       io.WriteString(c, "+PONG\r\n")
     case "echo":
       io.WriteString(c, fmt.Sprintf("+%s\r\n", cmd[i+1]))
+    case "set":
+      if len(cmd) <= i+2 {
+        writeMessage(c, "Not enough arguments")
+        continue
+      }
+      err := set(cmd[i+1], cmd[i+2])
+      if err != nil{
+        writeMessage(c, err.Error())
+        continue
+      }
+      writeMessage(c, cmd[i+1])
+
+    case "get":
+      if len(cmd) <= i+1 {
+        writeMessage(c, "Not enough arguments")
+        continue
+      }
+
+      v, err := get(cmd[i+1])
+      if err != nil{
+        writeMessage(c, err.Error())
+        continue
+      }
+      writeMessage(c, v)
     }
   }
+}
+
+func writeMessage(c net.Conn, msg string){
+  io.WriteString(c, fmt.Sprintf("+%s\r\n", msg))
+}
+
+func set(key string, value string) error{
+  if _, ok := storage[key]; ok{
+    return errors.New("Key already exists") 
+  }
+  storage[key] = value
+  return nil
+}
+
+func get(key string) (string, error){
+  value, ok := storage[key] 
+  if !ok{
+    return "", errors.New("No such key")
+  }
+  return value, nil
 }
