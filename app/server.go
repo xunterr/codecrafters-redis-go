@@ -82,50 +82,57 @@ func parseResp(req []byte) []string{
   }
   return values
 }
-
-func handleCmd(c net.Conn, cmd []string){
-  for i := 0; i<len(cmd); i++{
-    switch strings.ToLower(strings.TrimSpace(cmd[i])){
-    case "ping":
-      io.WriteString(c, "+PONG\r\n")
-    case "echo":
-      io.WriteString(c, fmt.Sprintf("+%s\r\n", cmd[i+1]))
-    case "set":
-      if len(cmd) <= i+2 {
-        writeMessage(c, "Not enough arguments")
-        continue
-      }
-      
-      if len(cmd) > i+4 && strings.ToLower(cmd[i+3]) == "px"{
-        expire, err := strconv.Atoi(cmd[i+4])
-        if err != nil{
-          writeMessage(c, "Wrong time format")
-          continue
-        }
-        err = setWithTimer(cmd[i+1], cmd[i+2], expire)
-      } else {
-        err := set(cmd[i+1], cmd[i+2])
-        if err != nil{
-          writeMessage(c, err.Error())
-          continue
-        }
-      }
-      writeMessage(c, "OK")
-
-    case "get":
-      if len(cmd) <= i+1 {
-        writeMessage(c, "Not enough arguments")
-        continue
-      }
-      v, err := get(cmd[i+1]) 
-      if err != nil{
-        io.WriteString(c, "$-1\r\n")
-        continue
-      }
-      writeMessage(c, v)
+func handleCmd(c net.Conn, cmd []string) {
+    for i := 0; i < len(cmd); i++ {
+        cmd[i] = strings.ToLower(strings.TrimSpace(cmd[i]))
+        switch cmd[i] {
+        case "ping":
+            io.WriteString(c, "+PONG\r\n")
+        case "echo":
+            if i+1 >= len(cmd) {
+                writeMessage(c, "Not enough arguments")
+                continue
+            }
+            io.WriteString(c, fmt.Sprintf("+%s\r\n", cmd[i+1]))
+            i++ 
+        case "set":
+            if len(cmd) <= i+2 {
+                writeMessage(c, "Not enough arguments")
+                continue
+            }
+            if len(cmd) > i+4 && strings.ToLower(cmd[i+3]) == "px" {
+                expire, err := strconv.Atoi(cmd[i+4])
+                if err != nil {
+                    writeMessage(c, "Wrong time format")
+                    continue
+                }
+                err = setWithTimer(cmd[i+1], cmd[i+2], expire)
+                i+=4
+            } else {
+                err := set(cmd[i+1], cmd[i+2])
+                if err != nil {
+                    writeMessage(c, err.Error())
+                    continue
+                }
+                i+=2
+            }
+            writeMessage(c, "OK")
+        case "get":
+            if len(cmd) <= i+1 {
+                writeMessage(c, "Not enough arguments")
+                continue
+            }
+            v, err := get(cmd[i+1])
+            if err != nil {
+                io.WriteString(c, "$-1\r\n")
+                continue
+            }
+            writeMessage(c, v)
+            i++ 
+          }
     }
-  }
 }
+
 
 func writeMessage(c net.Conn, msg string){
   io.WriteString(c, fmt.Sprintf("+%s\r\n", msg))
