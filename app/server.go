@@ -118,8 +118,10 @@ func handleCmd(c net.Conn, cmd []string){
         writeMessage(c, "Not enough arguments")
         continue
       }
-
-      v := get(cmd[i+1]) 
+      v, err := get(cmd[i+1]) 
+      if err != nil{
+        continue
+      }
       writeMessage(c, v)
     }
   }
@@ -140,7 +142,6 @@ func setWithTimer(key string, value string, expire int) error {
     timer := time.After(expiryMs)
     log.Printf("Expiry (ms): %d", expire)
     <-timer
-    log.Println("Expired")
     delete(storage, key)
   }(expire, key)
   return nil
@@ -154,7 +155,10 @@ func set(key string, value string) error{
   return nil
 }
 
-func get(key string) string{ 
-  value, _ := storage[key]  
-  return value
+func get(key string) (string, error){ 
+  value, ok := storage[key]  
+  if !ok{
+    return "", errors.New("No such key") 
+  }
+  return value, nil
 }
