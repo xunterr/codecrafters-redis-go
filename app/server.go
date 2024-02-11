@@ -119,7 +119,7 @@ func handleCmd(c net.Conn, cmd []string){
       }
       v, err := get(cmd[i+1]) 
       if err != nil{
-        c.Write([]byte(v))
+        c.Write([]byte(""))
         continue
       }
       writeMessage(c, v)
