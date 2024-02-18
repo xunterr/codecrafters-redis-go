@@ -9,23 +9,12 @@ type TokenType int
 
 const (
 	EOF TokenType = iota
-	Command
 	Plus
 	Minus
 	Dollar
 	Asterisk
 	String
 	Number
-)
-
-var (
-	commands = map[string]bool{
-		"ECHO": true,
-		"SET":  true,
-		"GET":  true,
-		"PING": true,
-		"PONG": true,
-	}
 )
 
 type Token struct {
@@ -68,16 +57,12 @@ func (s *Scanner) scanToken() {
 	switch c {
 	case '*':
 		s.addToken(Asterisk, nil)
-		break
 	case '$':
 		s.addToken(Dollar, nil)
-		break
 	case '+':
 		s.addToken(Plus, nil)
-		break
 	case '\n':
 		s.line++
-		break
 	case ' ':
 	case '\r':
 	case '\t':
@@ -105,10 +90,6 @@ func (s *Scanner) scanString() {
 
 	tokenType := String
 	literal := s.source[s.start:s.current]
-
-	if _, ok := commands[literal]; ok {
-		tokenType = Command
-	}
 
 	s.addToken(tokenType, literal)
 }

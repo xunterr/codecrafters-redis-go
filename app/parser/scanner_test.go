@@ -14,7 +14,6 @@ func TestScanToken(t *testing.T) {
 		{"ABCD", String},
 		{"*", Asterisk},
 		{"+", Plus},
-		{"ECHO", Command},
 	}
 
 	for _, e := range tests {
