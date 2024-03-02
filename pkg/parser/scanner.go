@@ -3,6 +3,8 @@ package parser
 import (
 	"log"
 	"strconv"
+
+	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
 type TokenType int
@@ -68,9 +70,9 @@ func (s *Scanner) scanToken() {
 	case '\t':
 		break
 	default:
-		if isDigit(c) {
+		if utils.IsDigit(c) {
 			s.scanNumber()
-		} else if isAlfa(c) {
+		} else if utils.IsAlfa(c) {
 			s.scanString()
 		} else {
 			log.Println("Unknown token")
@@ -84,7 +86,7 @@ func (s *Scanner) addToken(tokenType TokenType, literal any) {
 }
 
 func (s *Scanner) scanString() {
-	for isAlfa(s.peek()) && !s.isAtEnd() {
+	for utils.IsAlfa(s.peek()) && !s.isAtEnd() {
 		s.current++
 	}
 
@@ -95,7 +97,7 @@ func (s *Scanner) scanString() {
 }
 
 func (s *Scanner) scanNumber() {
-	for isDigit(s.peek()) {
+	for utils.IsDigit(s.peek()) {
 		s.current++
 	}
 
@@ -124,14 +126,4 @@ func (s *Scanner) peekNext() byte {
 
 func (s Scanner) isAtEnd() bool {
 	return s.current >= len(s.source)
-}
-
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
-}
-
-func isAlfa(c byte) bool {
-	return (c >= 'a' && c <= 'z') ||
-		(c >= 'A' && c <= 'Z') ||
-		c == '_'
 }

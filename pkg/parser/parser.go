@@ -1,6 +1,10 @@
 package parser
 
-import "log"
+import (
+	"log"
+
+	"github.com/mitchellh/mapstructure"
+)
 
 type DataType int
 
@@ -10,21 +14,34 @@ const (
 )
 
 type Data struct {
-	dataType DataType
-	value    any
+	DataType DataType
+	Value    any
 }
+
 type Parser struct {
 	tokens  []Token
 	current int
 }
 
+func NewParser(tokens []Token) *Parser {
+	return &Parser{
+		tokens:  tokens,
+		current: 0,
+	}
+}
+
+func (d Data) ToMap() (out map[string]any, err error) {
+	err = mapstructure.Decode(d, &out)
+	return
+}
+
 func (p *Parser) Parse() *Data {
-	dataType, length := p.parseType() //0
+	dataType, length := p.parseType()
 	var value any
 
 	switch dataType {
 	case StringData:
-		token := p.advance() //2
+		token := p.advance()
 		if token.TokenType != String {
 			log.Printf("Type %d is not assignable to type 'StringData'", token.TokenType)
 			break
@@ -38,7 +55,7 @@ func (p *Parser) Parse() *Data {
 }
 
 func (p *Parser) parseType() (DataType, int) {
-	typeToken := p.advance() //0
+	typeToken := p.advance()
 	var dataType DataType
 	switch typeToken.TokenType {
 	case Plus:
@@ -55,7 +72,7 @@ func (p *Parser) parseType() (DataType, int) {
 }
 
 func (p *Parser) parseLength() int {
-	length := p.advance() //1
+	length := p.advance()
 	if length.TokenType != Number {
 		log.Printf("Wrong length value, want Number, have: %d", length.TokenType)
 		return -1
