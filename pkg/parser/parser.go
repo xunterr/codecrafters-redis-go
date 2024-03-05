@@ -1,8 +1,11 @@
 package parser
 
 import (
-	"log"
+	"errors"
+	"fmt"
+	"strconv"
 
+	"github.com/codecrafters-io/redis-starter-go/utils"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -18,14 +21,21 @@ type Data struct {
 	Value    any
 }
 
+type TypeHeader struct {
+	dataType DataType
+	length   int
+}
+
 type Parser struct {
-	tokens  []Token
+	source  string
+	start   int
 	current int
 }
 
-func NewParser(tokens []Token) *Parser {
+func NewParser(source string) *Parser {
 	return &Parser{
-		tokens:  tokens,
+		source:  source,
+		start:   0,
 		current: 0,
 	}
 }
@@ -35,67 +45,126 @@ func (d Data) ToMap() (out map[string]any, err error) {
 	return
 }
 
-func (p *Parser) Parse() *Data {
-	dataType, length := p.parseType()
-	var value any
-
-	switch dataType {
-	case StringData:
-		token := p.advance()
-		if token.TokenType != String {
-			log.Printf("Type %d is not assignable to type 'StringData'", token.TokenType)
-			break
-		}
-		value = token.Literal
+func (data Data) Flat() (res []string) {
+	switch data.DataType {
 	case ArrayData:
-		value = p.parseArray(length)
+		arrData := data.Value.([]Data)
+		for _, d := range arrData {
+			res = append(res, d.Flat()...)
+		}
+	case StringData:
+		strData := data.Value.(string)
+		res = append(res, strData)
 	}
-
-	return &Data{dataType, value}
+	return res
 }
 
-func (p *Parser) parseType() (DataType, int) {
-	typeToken := p.advance()
+func (p *Parser) Parse() (*Data, error) {
+	typeHeader, err := p.parseTypeHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.consume("Expecting CRLF after type definition", '\r', '\n')
+	if err != nil {
+		return nil, err
+	}
+
+	var value any
+	switch typeHeader.dataType {
+	case ArrayData:
+		value, err = p.parseArray(typeHeader.length)
+	case StringData:
+		value = p.scanString()
+		err = p.consume("Expecting CRLF after value", '\r', '\n')
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Data{typeHeader.dataType, value}, nil
+}
+
+func (p *Parser) parseTypeHeader() (TypeHeader, error) {
+	typeChar := p.peek()
+	p.current++
+	p.start = p.current
 	var dataType DataType
-	switch typeToken.TokenType {
-	case Plus:
-	case Dollar:
-		dataType = StringData
-	case Asterisk:
+	switch typeChar {
+	case '*':
 		dataType = ArrayData
+		break
+	case '$':
+		dataType = StringData
+		break
 	default:
-		log.Printf("Unknown type: %d", typeToken.TokenType)
-		return -1, -1
+		return TypeHeader{}, errors.New(fmt.Sprintf("Unknown type: %c", typeChar))
 	}
-	length := p.parseLength()
-	return dataType, length
+	length := p.parseNumber()
+	return TypeHeader{dataType, length}, nil
 }
 
-func (p *Parser) parseLength() int {
-	length := p.advance()
-	if length.TokenType != Number {
-		log.Printf("Wrong length value, want Number, have: %d", length.TokenType)
+func (p *Parser) parseArray(length int) ([]Data, error) {
+	value := make([]Data, length)
+	for i := 0; i < length; i++ {
+		parsed, err := p.Parse()
+		if err != nil {
+			return value, err
+		}
+		value[i] = *parsed
+	}
+	return value, nil
+}
+
+func (p *Parser) scanString() string {
+	p.start = p.current
+	for (utils.IsAlfa(p.peek()) || utils.IsSpecial(p.peek())) && !p.isAtEnd() {
+		p.current++
+	}
+
+	literal := p.source[p.start:p.current]
+	return literal
+}
+
+func (p *Parser) parseNumber() int {
+	p.start = p.current
+	for utils.IsDigit(p.peek()) {
+		p.current++
+	}
+
+	value, err := strconv.Atoi(p.source[p.start:p.current])
+
+	if err != nil {
 		return -1
 	}
 
-	return length.Literal.(int)
-}
-
-func (p *Parser) parseArray(length int) []Data {
-	value := make([]Data, length)
-	for i := 0; i < length; i++ {
-		value[i] = *p.Parse()
-	}
 	return value
 }
 
-func (p *Parser) advance() Token {
-	if !p.isAtEnd() {
+func (p *Parser) consume(msg string, seq ...byte) error {
+	for _, value := range seq {
+		toConsume := p.peek()
+		if toConsume != value {
+			return errors.New(msg)
+		}
 		p.current++
 	}
-	return p.tokens[p.current-1]
+	return nil
+}
+
+func (p *Parser) peek() byte {
+	if p.isAtEnd() {
+		return '\000'
+	}
+	return p.source[p.current]
+}
+
+func (p *Parser) peekNext() byte {
+	if p.current+1 > len(p.source) {
+		return '\000'
+	}
+	return p.source[p.current+1]
 }
 
 func (p Parser) isAtEnd() bool {
-	return p.tokens[p.current].TokenType == EOF
+	return p.current >= len(p.source)
 }

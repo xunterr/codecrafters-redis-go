@@ -2,17 +2,18 @@ package parser
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseArray(t *testing.T) {
-	scanner := NewScanner("*2\r\n$4\r\nECHO\r\n$3\r\nABC\r\n")
-	tokens := scanner.ScanTokens()
+	source := "*2\r\n$4\r\nECHO\r\n$3\r\nABC\r\n"
 	parser := Parser{
-		tokens:  tokens,
+		source:  source,
 		current: 0,
 	}
 
-	data := parser.Parse()
+	data, _ := parser.Parse()
 
 	if data.DataType != ArrayData {
 		t.Errorf("Wrong container data type. Have: %d, want: %d (ArrayData)", data.DataType, ArrayData)
@@ -43,4 +44,22 @@ func TestToMap(t *testing.T) {
 		t.Error(err.Error())
 	}
 	t.Log(p)
+}
+
+func TestFlat(t *testing.T) {
+	data := &Data{
+		DataType: ArrayData,
+		Value: []Data{
+			{
+				DataType: StringData,
+				Value:    "Hi",
+			},
+		},
+	}
+	res := data.Flat()
+	expected := []string{"Hi"}
+
+	if !cmp.Equal(res, expected) {
+		t.Errorf("Wrong flat result. Have: %v, want: %v", res, expected)
+	}
 }

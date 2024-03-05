@@ -1,0 +1,5 @@
+*2
+$5
+ECHO
+$12
+Hello_world!
