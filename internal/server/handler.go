@@ -28,11 +28,9 @@ func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
 		return
 	}
 
-	var data []parser.Data
 	for _, arg := range cmd.Arguments {
-		data = append(data, parser.BulkStringData(arg))
+		io.WriteString(c, string(parser.BulkStringData(arg).Marshal()))
 	}
-	io.WriteString(c, string(parser.ArrayData(data).Marshal()))
 }
 
 func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
