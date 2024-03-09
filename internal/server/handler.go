@@ -64,6 +64,8 @@ func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 			return
 		}
 	}
+
+	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
 func (h Handler) handleGet(c net.Conn, cmd commands.Command) {
