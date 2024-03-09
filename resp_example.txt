@@ -1,5 +1,7 @@
-*2
+*3
+$4
+SET
+$3
+KEY
 $5
-ECHO
-$12
-Hello_world!
+XDXDD

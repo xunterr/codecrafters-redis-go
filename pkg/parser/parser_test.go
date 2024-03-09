@@ -15,28 +15,30 @@ func TestParseArray(t *testing.T) {
 
 	data, _ := parser.Parse()
 
-	if data.DataType != ArrayData {
-		t.Errorf("Wrong container data type. Have: %d, want: %d (ArrayData)", data.DataType, ArrayData)
+	if data.dataType != Array {
+		t.Errorf("Wrong container data type. Have: %d, want: %d (Array)", data.dataType, Array)
 	}
 
-	array := data.Value.([]Data)
+	array := data.array
 	if len(array) != 2 {
 		t.Errorf("Wrong array length. Have: %d, want: 2", len(array))
 	}
 
 	for _, data := range array {
-		if data.DataType != StringData {
-			t.Errorf("Wrong array content type. Have: %d, want: %d (StringData)", data.DataType, StringData)
+		if data.dataType != BulkString {
+			t.Errorf("Wrong array content type. Have: %s, want: %s (String)", string(data.dataType), string(BulkString))
 		}
 	}
 }
 
 func TestToMap(t *testing.T) {
 	data := &Data{
-		DataType: ArrayData,
-		Value: Data{
-			DataType: StringData,
-			Value:    "Hi",
+		dataType: Array,
+		array: []Data{
+			{
+				dataType: String,
+				string:   "Hi",
+			},
 		},
 	}
 	p, err := data.ToMap()
@@ -48,11 +50,11 @@ func TestToMap(t *testing.T) {
 
 func TestFlat(t *testing.T) {
 	data := &Data{
-		DataType: ArrayData,
-		Value: []Data{
+		dataType: Array,
+		array: []Data{
 			{
-				DataType: StringData,
-				Value:    "Hi",
+				dataType: String,
+				string:   "Hi",
 			},
 		},
 	}
@@ -61,5 +63,29 @@ func TestFlat(t *testing.T) {
 
 	if !cmp.Equal(res, expected) {
 		t.Errorf("Wrong flat result. Have: %v, want: %v", res, expected)
+	}
+}
+
+func TestMarshalSimple(t *testing.T) {
+	data := Data{
+		dataType: String,
+		string:   "Hello",
+	}
+	want := "+Hello\r\n"
+	res := data.marshalSimple()
+	if string(res) != want {
+		t.Errorf("Wrong marshal result. Have: %s, want: %s", string(res), want)
+	}
+}
+
+func TestMarshalBulk(t *testing.T) {
+	data := Data{
+		dataType: BulkString,
+		string:   "Hello",
+	}
+	want := "$5\r\nHello\r\n"
+	res := data.marshalBulk()
+	if string(res) != want {
+		t.Errorf("Wrong marshal result. Have: %s, want: %s", string(res), want)
 	}
 }

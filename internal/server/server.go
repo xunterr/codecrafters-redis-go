@@ -9,20 +9,17 @@ import (
 	"os"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
-	"github.com/codecrafters-io/redis-starter-go/internal/storage"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
 )
 
 type HandlerFunc func(c net.Conn, cmd commands.Command)
 
 type Server struct {
-	storage  *storage.Storage
 	handlers map[string]HandlerFunc
 }
 
-func NewServer(storage *storage.Storage) Server {
+func NewServer() Server {
 	return Server{
-		storage:  storage,
 		handlers: map[string]HandlerFunc{},
 	}
 }
@@ -30,7 +27,7 @@ func NewServer(storage *storage.Storage) Server {
 func (s Server) Listen(addr string) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Printf("Failed to bind to %s\n", addr)
+		log.Printf("Failed to bind to %s", addr)
 		os.Exit(1)
 	}
 
@@ -38,7 +35,7 @@ func (s Server) Listen(addr string) {
 		c, err := l.Accept()
 		log.Printf("Accepted: %s", c.RemoteAddr().String())
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
+			log.Printf("Error accepting connection: %s", err.Error())
 			os.Exit(1)
 		}
 		go func(c net.Conn) {
@@ -59,7 +56,8 @@ func (s Server) handle(c net.Conn) {
 		size, err := c.Read(buf)
 
 		if err != nil {
-			io.WriteString(c, "Error reading request!\n")
+			msg := parser.ErrorData("Error reading request!").Marshal()
+			io.WriteString(c, string(msg))
 			continue
 		}
 
@@ -67,13 +65,15 @@ func (s Server) handle(c net.Conn) {
 
 		parsed, err := parser.NewParser(string(buf)).Parse()
 		if err != nil {
-			io.WriteString(c, fmt.Sprintf("Error parsing RESP: %s\n", err.Error()))
+			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
+			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}
 
 		command, err := commands.GetCommand(parsed.Flat())
 		if err != nil {
-			io.WriteString(c, fmt.Sprintf("Error parsing command: %s\n", err.Error()))
+			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
+			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}
 
