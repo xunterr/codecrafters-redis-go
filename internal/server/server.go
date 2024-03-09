@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 
 	"net"
 	"os"
@@ -77,7 +78,7 @@ func (s Server) handle(c net.Conn) {
 			continue
 		}
 
-		handler, ok := s.handlers[command.Name]
+		handler, ok := s.handlers[strings.ToUpper(command.Name)]
 		if ok {
 			go handler(c, command)
 		}
