@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -9,18 +10,21 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/storage"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
+	"github.com/mitchellh/mapstructure"
 )
 
 type Handler struct {
 	storage storage.Storage
+	server  *Server
 }
 
 func Route(server Server, storage storage.Storage) {
-	handler := Handler{storage: storage}
+	handler := Handler{storage: storage, server: &server}
 	server.AddHandler("ECHO", handler.handleEcho)
 	server.AddHandler("SET", handler.handleSet)
 	server.AddHandler("GET", handler.handleGet)
 	server.AddHandler("PING", handler.handlePing)
+	server.AddHandler("INFO", handler.handleInfo)
 }
 
 func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
@@ -88,6 +92,23 @@ func (h Handler) handlePing(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.StringData("PONG").Marshal()))
 }
 
+func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
+	var info map[string]any
+	err := mapstructure.Decode(h.server.GetServerInfo(), &info)
+	if err != nil {
+		io.WriteString(c, error(err.Error()))
+		return
+	}
+
+	var infoData []parser.Data
+	for k, v := range info {
+		infoString := fmt.Sprintf("%s:%v", k, v)
+		infoData = append(infoData, parser.BulkStringData(infoString))
+	}
+	io.WriteString(c, string(parser.ArrayData(infoData).Marshal()))
+}
+
 func error(str string) string {
-	return string(parser.ErrorData(str).Marshal())
+	errString := fmt.Sprintf("ERR %s", str)
+	return string(parser.ErrorData(errString).Marshal())
 }

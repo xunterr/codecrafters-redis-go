@@ -17,13 +17,30 @@ type HandlerFunc func(c net.Conn, cmd commands.Command)
 type Server struct {
 	handlers  map[string]HandlerFunc
 	cmdParser commands.CommandParser
+	severInfo ServerInfo
 }
 
-func NewServer(cmdParser commands.CommandParser) Server {
+type ServerRole string
+
+const (
+	Master  ServerRole = "master"
+	Replica ServerRole = "replica"
+)
+
+type ServerInfo struct {
+	Role ServerRole `mapstructure:"role"`
+}
+
+func NewServer(cmdParser commands.CommandParser, serverInfo ServerInfo) Server {
 	return Server{
 		handlers:  map[string]HandlerFunc{},
 		cmdParser: cmdParser,
+		severInfo: serverInfo,
 	}
+}
+
+func (s Server) GetServerInfo() ServerInfo {
+	return s.severInfo
 }
 
 func (s Server) Listen(addr string) {

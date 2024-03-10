@@ -36,7 +36,10 @@ func main() {
 	}
 
 	cmdParser := commands.NewCommandParser(table)
-	sv := server.NewServer(cmdParser)
+	sInfo := server.ServerInfo{
+		Role: server.Master,
+	}
+	sv := server.NewServer(cmdParser, sInfo)
 	storage := storage.NewStorage()
 	server.Route(sv, *storage)
 	sv.Listen(fmt.Sprintf(":%d", PORT))

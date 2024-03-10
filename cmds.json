@@ -18,5 +18,9 @@
   "PING": {
     "args": [],
     "options": {}
+  },
+  "INFO": {
+    "args": [],
+    "options": {}
   }
 }
