@@ -43,7 +43,8 @@ type Command struct {
 }
 
 func (p CommandParser) GetCommand(req []string) (Command, error) {
-	cmdInfo, ok := p.cmdTable[req[0]]
+	commandName := strings.ToUpper(req[0])
+	cmdInfo, ok := p.cmdTable[commandName]
 
 	if !ok {
 		return Command{}, errors.New(fmt.Sprintf("Unknown command: %s", req[0]))
@@ -58,7 +59,7 @@ func (p CommandParser) GetCommand(req []string) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	return Command{req[0], options, args}, nil
+	return Command{commandName, options, args}, nil
 }
 
 func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
