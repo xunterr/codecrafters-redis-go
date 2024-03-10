@@ -22,6 +22,7 @@ type Data struct {
 	dataType DataType
 	string   string
 	array    []Data
+	null     bool
 }
 
 type TypeHeader struct {
@@ -182,6 +183,10 @@ func BulkStringData(str string) Data {
 	return Data{dataType: BulkString, string: str}
 }
 
+func NullBulkStringData() Data {
+	return Data{dataType: BulkString, null: true}
+}
+
 func ArrayData(arr []Data) Data {
 	return Data{dataType: Array, array: arr}
 }
@@ -215,6 +220,13 @@ func (d Data) marshalSimple() (res []byte) {
 
 func (d Data) marshalBulk() (res []byte) {
 	res = append(res, '$')
+
+	if d.null {
+		res = append(res, []byte("-1")...)
+		res = append(res, '\r', '\n')
+		return
+	}
+
 	value := d.string
 	res = append(res, []byte(strconv.FormatInt(int64(len(value)), 10))...)
 	res = append(res, '\r', '\n')
