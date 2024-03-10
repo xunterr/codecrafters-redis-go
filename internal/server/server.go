@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strings"
 
 	"net"
 	"os"
@@ -16,12 +15,14 @@ import (
 type HandlerFunc func(c net.Conn, cmd commands.Command)
 
 type Server struct {
-	handlers map[string]HandlerFunc
+	handlers  map[string]HandlerFunc
+	cmdParser commands.CommandParser
 }
 
-func NewServer() Server {
+func NewServer(cmdParser commands.CommandParser) Server {
 	return Server{
-		handlers: map[string]HandlerFunc{},
+		handlers:  map[string]HandlerFunc{},
+		cmdParser: cmdParser,
 	}
 }
 
@@ -71,14 +72,14 @@ func (s Server) handle(c net.Conn) {
 			continue
 		}
 
-		command, err := commands.GetCommand(parsed.Flat())
+		command, err := s.cmdParser.GetCommand(parsed.Flat())
 		if err != nil {
 			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}
 
-		handler, ok := s.handlers[strings.ToUpper(command.Name)]
+		handler, ok := s.handlers[command.Name]
 		if ok {
 			go handler(c, command)
 		}

@@ -35,7 +35,7 @@ func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
 
 func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 2 {
-		io.WriteString(c, error("GET command requirees exactly 2 arguments"))
+		io.WriteString(c, error("SET command requirees exactly 2 arguments"))
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 			return
 		}
 
-		err = h.storage.SetWithTimer(optArgs[0], optArgs[1], exp)
+		err = h.storage.SetWithTimer(cmd.Arguments[0], cmd.Arguments[1], exp)
 		if err != nil {
 			io.WriteString(c, error(err.Error()))
 			return

@@ -1,0 +1,22 @@
+{
+  "ECHO": {
+    "args": [
+      "string"
+    ],
+    "options": {}
+  },
+  "SET": {
+    "args": ["string", "string"],
+    "options": {
+        "PX": ["string"]
+      }
+  },
+  "GET": {
+    "args": ["string"],
+    "options": {}
+  },
+  "PING": {
+    "args": [],
+    "options": {}
+  }
+}

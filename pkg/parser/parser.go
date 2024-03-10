@@ -122,7 +122,7 @@ func (p *Parser) parseArray(length int) ([]Data, error) {
 
 func (p *Parser) scanString() string {
 	p.start = p.current
-	for (utils.IsAlfa(p.peek()) || utils.IsSpecial(p.peek())) && !p.isAtEnd() {
+	for (utils.IsAlfaNumeric(p.peek()) || utils.IsSpecial(p.peek())) && !p.isAtEnd() {
 		p.current++
 	}
 
