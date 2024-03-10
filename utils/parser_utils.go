@@ -14,6 +14,10 @@ func IsAlfa(c byte) bool {
 		c == '_'
 }
 
+func IsAlfaNumeric(c byte) bool {
+	return IsDigit(c) || IsAlfa(c)
+}
+
 func IsSpecial(c byte) bool {
 	isSpecial := regexp.MustCompile("[^A-Za-z0-9]").MatchString(string(c))
 	return isSpecial && c != '\r' && c != '\n'

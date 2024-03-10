@@ -1,17 +1,39 @@
 package commands
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 )
 
-const OPTIONS_PREFIX string = "-"
+type CommandInfo struct {
+	Args    []string
+	Options map[string][]string
+}
 
-var commands map[string]int = map[string]int{ //key is a name, value is a min count of arguments
-	"ECHO": 1,
-	"PING": 0,
-	"PONG": 0,
-	"SET":  2,
-	"GET":  1,
+func LoadJSON(filename string) (map[string]CommandInfo, error) {
+	jsonFile, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := io.ReadAll(jsonFile)
+
+	var table map[string]CommandInfo
+	err = json.Unmarshal(byteValue, &table)
+	return table, err
+}
+
+type CommandParser struct {
+	cmdTable map[string]CommandInfo
+}
+
+func NewCommandParser(cmdTable map[string]CommandInfo) CommandParser {
+	return CommandParser{cmdTable}
 }
 
 type Command struct {
@@ -20,39 +42,54 @@ type Command struct {
 	Arguments []string
 }
 
-func GetCommand(req []string) (Command, error) {
-	args := parseArguments(req[1:])
-	options := parseOptions(req[len(args)+1:])
+func (p CommandParser) GetCommand(req []string) (Command, error) {
+	cmdInfo, ok := p.cmdTable[req[0]]
+
+	if !ok {
+		return Command{}, errors.New(fmt.Sprintf("Unknown command: %s", req[0]))
+	}
+
+	args, err := p.parseArguments(req[1:], cmdInfo)
+	if err != nil {
+		return Command{}, err
+	}
+
+	options, err := p.parseOptions(req[len(args)+1:], cmdInfo)
+	if err != nil {
+		return Command{}, err
+	}
 	return Command{req[0], options, args}, nil
 }
 
-func parseOptions(input []string) map[string][]string {
+func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
 	res := make(map[string][]string)
 	var currentOption string
-	for _, arg := range input {
-		if len(arg) == 0 {
+	for i := 0; i < len(input); i++ {
+		if len(input[i]) == 0 {
 			continue
 		}
-		if strings.HasPrefix(arg, OPTIONS_PREFIX) {
-			currentOption = arg[1:]
-			res[currentOption] = make([]string, 0)
-		} else {
-			res[currentOption] = append(res[currentOption], arg)
+
+		option := strings.ToUpper(input[i])
+		if args, ok := cmdInfo.Options[option]; ok {
+			currentOption = option
+
+			if len(input) < len(args)+i+1 {
+				return res, errors.New(fmt.Sprintf("Too few argumets for option %s", currentOption))
+			}
+			res[currentOption] = input[i+1 : len(args)+1]
+			i += len(args) - 1
+		} else if currentOption == "" {
+			return res, errors.New(fmt.Sprintf("No such option: %s", option))
 		}
+
 	}
-	return res
+	return res, nil
 }
 
-func parseArguments(input []string) (args []string) {
-	for _, arg := range input {
-		if !isArgument(arg) {
-			break
-		}
-		args = append(args, arg)
+func (p CommandParser) parseArguments(input []string, cmdInfo CommandInfo) ([]string, error) {
+	if len(input) < len(cmdInfo.Args) {
+		return nil, errors.New("Too few arguments")
 	}
-	return args
-}
 
-func isArgument(str string) bool {
-	return !strings.HasPrefix(str, "-")
+	return input[:len(cmdInfo.Args)], nil
 }

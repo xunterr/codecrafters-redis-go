@@ -3,7 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/server"
 	"github.com/codecrafters-io/redis-starter-go/internal/storage"
 )
@@ -19,7 +23,20 @@ func init() {
 func main() {
 	flag.Parse()
 
-	sv := server.NewServer()
+	path, err := filepath.Abs("cmds.json")
+	if err != nil {
+		log.Println(err.Error())
+		os.Exit(1)
+	}
+
+	table, err := commands.LoadJSON(path)
+	if err != nil {
+		log.Println(err.Error())
+		os.Exit(1)
+	}
+
+	cmdParser := commands.NewCommandParser(table)
+	sv := server.NewServer(cmdParser)
 	storage := storage.NewStorage()
 	server.Route(sv, *storage)
 	sv.Listen(fmt.Sprintf(":%d", PORT))
