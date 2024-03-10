@@ -2,6 +2,7 @@ package server
 
 import (
 	"io"
+	"log"
 	"net"
 	"strconv"
 
@@ -75,7 +76,8 @@ func (h Handler) handleGet(c net.Conn, cmd commands.Command) {
 	}
 	val, err := h.storage.Get(cmd.Arguments[0])
 	if err != nil {
-		io.WriteString(c, error(err.Error()))
+		io.WriteString(c, string(parser.NullBulkStringData().Marshal()))
+		log.Println(err.Error())
 		return
 	}
 
