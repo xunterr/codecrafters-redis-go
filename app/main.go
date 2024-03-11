@@ -13,13 +13,13 @@ import (
 )
 
 var (
-	PORT        = 6379
-	MASTER_PORT = -1
+	PORT      = 6379
+	REPLICAOF = ""
 )
 
 func init() {
 	flag.IntVar(&PORT, "port", PORT, "Port number")
-	flag.IntVar(&MASTER_PORT, "replicaof", MASTER_PORT, "Master server port number")
+	flag.StringVar(&REPLICAOF, "replicaof", REPLICAOF, "Master server address and port: <address port>")
 }
 
 func main() {
@@ -42,7 +42,7 @@ func main() {
 	sInfo := server.ServerInfo{
 		Role: server.Master,
 	}
-	if MASTER_PORT != -1 {
+	if REPLICAOF != "" {
 		sInfo.Role = server.Slave
 	}
 	sv := server.NewServer(cmdParser, sInfo)
