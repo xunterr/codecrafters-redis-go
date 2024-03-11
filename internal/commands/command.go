@@ -78,6 +78,9 @@ func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[st
 				return res, errors.New(fmt.Sprintf("Too few argumets for option %s", currentOption))
 			}
 			res[currentOption] = input[i+1 : len(args)+1]
+			if len(args) == 0 {
+				continue
+			}
 			i += len(args) - 1
 		} else if currentOption == "" {
 			return res, errors.New(fmt.Sprintf("No such option: %s", option))

@@ -1,1 +1,5 @@
-+INFO
+*2
+$4
+INFO
+$11
+REPLICATION

@@ -29,7 +29,7 @@ func Route(server Server, storage storage.Storage) {
 
 func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) < 1 {
-		io.WriteString(c, error("Not enough arguments for the ECHO command"))
+		io.WriteString(c, sendErr("Not enough arguments for the ECHO command"))
 		return
 	}
 
@@ -40,32 +40,32 @@ func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
 
 func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 2 {
-		io.WriteString(c, error("SET command requirees exactly 2 arguments"))
+		io.WriteString(c, sendErr("SET command requirees exactly 2 arguments"))
 		return
 	}
 
 	optArgs, ok := cmd.Options["PX"]
 	if ok {
 		if len(optArgs) != 1 {
-			io.WriteString(c, error("PX parameter requires exactly 1 argument"))
+			io.WriteString(c, sendErr("PX parameter requires exactly 1 argument"))
 			return
 		}
 
 		exp, err := strconv.Atoi(optArgs[0])
 		if err != nil {
-			io.WriteString(c, error("PX parameter must be integer"))
+			io.WriteString(c, sendErr("PX parameter must be integer"))
 			return
 		}
 
 		err = h.storage.SetWithTimer(cmd.Arguments[0], cmd.Arguments[1], exp)
 		if err != nil {
-			io.WriteString(c, error(err.Error()))
+			io.WriteString(c, sendErr(err.Error()))
 			return
 		}
 	} else {
 		err := h.storage.Set(cmd.Arguments[0], cmd.Arguments[1])
 		if err != nil {
-			io.WriteString(c, error(err.Error()))
+			io.WriteString(c, sendErr(err.Error()))
 			return
 		}
 	}
@@ -75,7 +75,7 @@ func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 
 func (h Handler) handleGet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 1 {
-		io.WriteString(c, error("GET command requires exactly 1 argument"))
+		io.WriteString(c, sendErr("GET command requires exactly 1 argument"))
 		return
 	}
 	val, err := h.storage.Get(cmd.Arguments[0])
@@ -96,7 +96,7 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 	var info map[string]any
 	err := mapstructure.Decode(h.server.GetServerInfo(), &info)
 	if err != nil {
-		io.WriteString(c, error(err.Error()))
+		io.WriteString(c, sendErr(err.Error()))
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.ArrayData(infoData).Marshal()))
 }
 
-func error(str string) string {
+func sendErr(str string) string {
 	errString := fmt.Sprintf("ERR %s", str)
 	return string(parser.ErrorData(errString).Marshal())
 }

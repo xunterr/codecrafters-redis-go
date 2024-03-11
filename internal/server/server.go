@@ -52,11 +52,12 @@ func (s Server) Listen(addr string) {
 
 	for {
 		c, err := l.Accept()
-		log.Printf("Accepted: %s", c.RemoteAddr().String())
 		if err != nil {
 			log.Printf("Error accepting connection: %s", err.Error())
 			os.Exit(1)
 		}
+		log.Printf("Accepted: %s", c.RemoteAddr().String())
+
 		go func(c net.Conn) {
 			s.handle(c)
 			c.Close()
@@ -71,20 +72,20 @@ func (s *Server) AddHandler(name string, handler HandlerFunc) {
 
 func (s Server) handle(c net.Conn) {
 	for {
-		var buf []byte = make([]byte, 1024)
-		size, err := c.Read(buf)
-
+		buf, err := s.readFromConn(c)
 		if err != nil {
-			msg := parser.ErrorData("Error reading request!").Marshal()
-			io.WriteString(c, string(msg))
-			continue
+			if err != io.EOF {
+				log.Printf("Error reading request: %s", err.Error())
+				msg := parser.ErrorData("Error reading request!").Marshal()
+				io.WriteString(c, string(msg))
+			}
+			break
 		}
-
-		buf = buf[:size]
 
 		parsed, err := parser.NewParser(string(buf)).Parse()
 		if err != nil {
 			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
+			log.Println(msg)
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}
@@ -99,6 +100,23 @@ func (s Server) handle(c net.Conn) {
 		handler, ok := s.handlers[command.Name]
 		if ok {
 			go handler(c, command)
+		}
+	}
+}
+
+func (s Server) readFromConn(c net.Conn) ([]byte, error) {
+	var buf []byte
+	chunkSize := 1024
+
+	for {
+		tmp := make([]byte, chunkSize)
+		size, err := c.Read(tmp)
+		if err != nil {
+			return buf, err
+		}
+		buf = append(buf, tmp[:size]...)
+		if size < chunkSize {
+			return buf, nil
 		}
 	}
 }
