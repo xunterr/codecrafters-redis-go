@@ -93,6 +93,8 @@ func (h Handler) handlePing(c net.Conn, cmd commands.Command) {
 }
 
 func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
+	si := h.server.GetServerInfo()
+	si.Role = "asd"
 	var info map[string]any
 	err := mapstructure.Decode(h.server.GetServerInfo(), &info)
 	if err != nil {
