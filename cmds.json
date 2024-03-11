@@ -21,6 +21,8 @@
   },
   "INFO": {
     "args": [],
-    "options": {}
+    "options": {
+      "REPLICATION": []
+    }
   }
 }
