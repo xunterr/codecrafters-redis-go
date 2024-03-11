@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/storage"
@@ -100,13 +101,13 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 		return
 	}
 
-	var infoData []parser.Data
+	var b strings.Builder
 	for k, v := range info {
-		infoString := fmt.Sprintf("%s:%v\n", k, v)
-		infoData = append(infoData, parser.BulkStringData(infoString))
+		b.WriteString(fmt.Sprintf("%s:%v\r\n", k, v))
 	}
 
-	resStr := string(infoData[0].Marshal())
+	str := b.String()[:len(b.String())-2]
+	resStr := string(parser.BulkStringData(str).Marshal())
 
 	io.WriteString(c, resStr)
 }
