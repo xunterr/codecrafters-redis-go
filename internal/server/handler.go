@@ -93,8 +93,6 @@ func (h Handler) handlePing(c net.Conn, cmd commands.Command) {
 }
 
 func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
-	si := h.server.GetServerInfo()
-	si.Role = "asd"
 	var info map[string]any
 	err := mapstructure.Decode(h.server.GetServerInfo(), &info)
 	if err != nil {
@@ -104,16 +102,12 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 
 	var infoData []parser.Data
 	for k, v := range info {
-		infoString := fmt.Sprintf("%s:%v", k, v)
+		infoString := fmt.Sprintf("%s:%v\n", k, v)
 		infoData = append(infoData, parser.BulkStringData(infoString))
 	}
 
-	var resStr string
-	if len(infoData) == 1 {
-		resStr = string(infoData[0].Marshal())
-	} else {
-		resStr = string(parser.ArrayData(infoData).Marshal())
-	}
+	resStr := string(infoData[0].Marshal())
+
 	io.WriteString(c, resStr)
 }
 
