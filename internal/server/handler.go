@@ -105,7 +105,14 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 		infoString := fmt.Sprintf("%s:%v", k, v)
 		infoData = append(infoData, parser.BulkStringData(infoString))
 	}
-	io.WriteString(c, string(parser.ArrayData(infoData).Marshal()))
+
+	var resStr string
+	if len(infoData) == 1 {
+		resStr = string(infoData[0].Marshal())
+	} else {
+		resStr = string(parser.ArrayData(infoData).Marshal())
+	}
+	io.WriteString(c, resStr)
 }
 
 func sendErr(str string) string {
