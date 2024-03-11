@@ -13,13 +13,13 @@ import (
 )
 
 var (
-	PORT      = 6379
-	REPLICAOF = ""
+	PORT        = 6379
+	MASTER_HOST = ""
 )
 
 func init() {
 	flag.IntVar(&PORT, "port", PORT, "Port number")
-	flag.StringVar(&REPLICAOF, "replicaof", REPLICAOF, "Master server address and port: <address port>")
+	flag.StringVar(&MASTER_HOST, "replicaof", MASTER_HOST, "Master server address and port: <host port> (should be the last argument)")
 }
 
 func main() {
@@ -40,7 +40,8 @@ func main() {
 	cmdParser := commands.NewCommandParser(table)
 
 	role := server.Master
-	if REPLICAOF != "" {
+	if MASTER_HOST != "" && len(flag.Args()) > 0 {
+		server.PingMaster(MASTER_HOST, flag.Arg(0))
 		role = server.Slave
 	}
 	sv := server.NewServer(cmdParser, role)
