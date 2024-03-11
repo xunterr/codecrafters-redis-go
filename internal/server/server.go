@@ -23,8 +23,8 @@ type Server struct {
 type ServerRole string
 
 const (
-	Master  ServerRole = "master"
-	Replica ServerRole = "replica"
+	Master ServerRole = "master"
+	Slave  ServerRole = "slave"
 )
 
 type ServerInfo struct {

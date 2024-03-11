@@ -13,11 +13,13 @@ import (
 )
 
 var (
-	PORT = 6379
+	PORT        = 6379
+	MASTER_PORT = -1
 )
 
 func init() {
 	flag.IntVar(&PORT, "port", PORT, "Port number")
+	flag.IntVar(&MASTER_PORT, "replicaof", MASTER_PORT, "Master server port number")
 }
 
 func main() {
@@ -36,10 +38,15 @@ func main() {
 	}
 
 	cmdParser := commands.NewCommandParser(table)
+
 	sInfo := server.ServerInfo{
 		Role: server.Master,
 	}
+	if MASTER_PORT != -1 {
+		sInfo.Role = server.Slave
+	}
 	sv := server.NewServer(cmdParser, sInfo)
+
 	storage := storage.NewStorage()
 	server.Route(sv, *storage)
 	sv.Listen(fmt.Sprintf(":%d", PORT))
