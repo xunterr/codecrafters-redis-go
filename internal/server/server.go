@@ -10,6 +10,7 @@ import (
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
+	"github.com/mitchellh/mapstructure"
 )
 
 type HandlerFunc func(c net.Conn, cmd commands.Command)
@@ -28,14 +29,25 @@ const (
 )
 
 type ServerInfo struct {
-	Role ServerRole `mapstructure:"role"`
+	Role       ServerRole `mapstructure:"role"`
+	ReplId     string     `mapstructure:"master_replid"`
+	ReplOffset int        `mapstructure:"master_repl_offset"`
 }
 
-func NewServer(cmdParser commands.CommandParser, serverInfo ServerInfo) Server {
+func (si ServerInfo) ToMap() (res map[string]string, err error) {
+	err = mapstructure.Decode(si, &res)
+	return
+}
+
+func NewServer(cmdParser commands.CommandParser, role ServerRole) Server {
 	return Server{
 		handlers:  map[string]HandlerFunc{},
 		cmdParser: cmdParser,
-		severInfo: serverInfo,
+		severInfo: ServerInfo{
+			Role:       role,
+			ReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+			ReplOffset: 0,
+		},
 	}
 }
 

@@ -39,13 +39,11 @@ func main() {
 
 	cmdParser := commands.NewCommandParser(table)
 
-	sInfo := server.ServerInfo{
-		Role: server.Master,
-	}
+	role := server.Master
 	if REPLICAOF != "" {
-		sInfo.Role = server.Slave
+		role = server.Slave
 	}
-	sv := server.NewServer(cmdParser, sInfo)
+	sv := server.NewServer(cmdParser, role)
 
 	storage := storage.NewStorage()
 	server.Route(sv, *storage)
