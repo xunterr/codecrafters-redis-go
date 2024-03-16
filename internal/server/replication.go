@@ -29,7 +29,7 @@ func pingMaster(c net.Conn) {
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if len(res) == 0 || res[0] != "PONG" {
+	if !expect(res, "PONG") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
@@ -37,18 +37,24 @@ func pingMaster(c net.Conn) {
 func setListeningPort(c net.Conn, lp int) {
 	log.Println("Set listening port")
 	send(c, []string{"REPLCONF", "listening-port", strconv.FormatInt(int64(lp), 10)})
-	_, err := read(c)
+	res, err := read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
+	}
+	if !expect(res, "OK") {
+		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
 
 func setCapabilities(c net.Conn) {
 	log.Println("Set capabilities")
 	send(c, []string{"REPLCONF", "capa", "psync2"})
-	_, err := read(c)
+	res, err := read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
+	}
+	if !expect(res, "OK") {
+		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
 
@@ -59,6 +65,10 @@ func psync(c net.Conn) {
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
+}
+
+func expect(res []string, str string) bool {
+	return len(res) != 0 && res[0] == str
 }
 
 func send(c net.Conn, cmd []string) {
