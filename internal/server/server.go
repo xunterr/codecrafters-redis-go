@@ -107,7 +107,6 @@ func (s Server) handle(c net.Conn) {
 		command, err := s.cmdParser.GetCommand(parsed.Flat())
 		if err != nil {
 			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
-			log.Println(command)
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}

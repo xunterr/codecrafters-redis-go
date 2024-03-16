@@ -18,10 +18,12 @@ func RegisterReplica(host string, port string, listeningPort int) {
 	pingMaster(c)
 	setListeningPort(c, listeningPort)
 	setCapabilities(c)
+	psync(c)
 	c.Close()
 }
 
 func pingMaster(c net.Conn) {
+	log.Println("Ping master")
 	send(c, []string{"ping"})
 	res, err := read(c)
 	if err != nil {
@@ -33,6 +35,7 @@ func pingMaster(c net.Conn) {
 }
 
 func setListeningPort(c net.Conn, lp int) {
+	log.Println("Set listening port")
 	send(c, []string{"REPLCONF", "listening-port", strconv.FormatInt(int64(lp), 10)})
 	_, err := read(c)
 	if err != nil {
@@ -41,7 +44,17 @@ func setListeningPort(c net.Conn, lp int) {
 }
 
 func setCapabilities(c net.Conn) {
+	log.Println("Set capabilities")
 	send(c, []string{"REPLCONF", "capa", "psync2"})
+	_, err := read(c)
+	if err != nil {
+		log.Fatalf("Error reading server response: %s", err.Error())
+	}
+}
+
+func psync(c net.Conn) {
+	log.Println("Psync")
+	send(c, []string{"PSYNC", "?", "-1"})
 	_, err := read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())

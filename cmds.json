@@ -31,5 +31,9 @@
       "LISTENING-PORT": ["string"],
       "CAPA": ["string"]
     }
+  },
+  "PSYNC": {
+    "args": ["string", "string"],
+    "options": {}
   }
 }
