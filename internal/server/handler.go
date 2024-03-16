@@ -26,6 +26,7 @@ func Route(server Server, storage storage.Storage) {
 	server.AddHandler("GET", handler.handleGet)
 	server.AddHandler("PING", handler.handlePing)
 	server.AddHandler("INFO", handler.handleInfo)
+	server.AddHandler("REPLCONF", handler.handleReplconf)
 }
 
 func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
@@ -110,6 +111,10 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 	resStr := string(parser.BulkStringData(str).Marshal())
 
 	io.WriteString(c, resStr)
+}
+
+func (h Handler) handleReplconf(c net.Conn, cmd commands.Command) {
+	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
 func sendErr(str string) string {

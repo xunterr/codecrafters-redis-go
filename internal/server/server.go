@@ -83,8 +83,10 @@ func (s *Server) AddHandler(name string, handler HandlerFunc) {
 }
 
 func (s Server) handle(c net.Conn) {
+	buf := make([]byte, 4096)
 	for {
-		buf, err := s.readFromConn(c)
+		ln, err := c.Read(buf)
+
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading request: %s", err.Error())
@@ -94,7 +96,7 @@ func (s Server) handle(c net.Conn) {
 			break
 		}
 
-		parsed, err := parser.NewParser(string(buf)).Parse()
+		parsed, err := parser.NewParser(string(buf[:ln])).Parse()
 		if err != nil {
 			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
 			log.Println(msg)
@@ -105,6 +107,7 @@ func (s Server) handle(c net.Conn) {
 		command, err := s.cmdParser.GetCommand(parsed.Flat())
 		if err != nil {
 			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
+			log.Println(command)
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 			continue
 		}
@@ -112,23 +115,6 @@ func (s Server) handle(c net.Conn) {
 		handler, ok := s.handlers[command.Name]
 		if ok {
 			go handler(c, command)
-		}
-	}
-}
-
-func (s Server) readFromConn(c net.Conn) ([]byte, error) {
-	var buf []byte
-	chunkSize := 1024
-
-	for {
-		tmp := make([]byte, chunkSize)
-		size, err := c.Read(tmp)
-		if err != nil {
-			return buf, err
-		}
-		buf = append(buf, tmp[:size]...)
-		if size < chunkSize {
-			return buf, nil
 		}
 	}
 }

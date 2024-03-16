@@ -41,7 +41,7 @@ func main() {
 
 	role := server.Master
 	if MASTER_HOST != "" && len(flag.Args()) > 0 {
-		server.PingMaster(MASTER_HOST, flag.Arg(0))
+		server.RegisterReplica(MASTER_HOST, flag.Arg(0), PORT)
 		role = server.Slave
 	}
 	sv := server.NewServer(cmdParser, role)
