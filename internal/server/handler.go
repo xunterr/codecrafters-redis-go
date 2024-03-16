@@ -27,6 +27,7 @@ func Route(server Server, storage storage.Storage) {
 	server.AddHandler("PING", handler.handlePing)
 	server.AddHandler("INFO", handler.handleInfo)
 	server.AddHandler("REPLCONF", handler.handleReplconf)
+	server.AddHandler("PSYNC", handler.handlePsync)
 }
 
 func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
@@ -115,6 +116,13 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 
 func (h Handler) handleReplconf(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.StringData("OK").Marshal()))
+}
+
+func (h Handler) handlePsync(c net.Conn, cmd commands.Command) {
+	serverInfo := h.server.GetServerInfo()
+
+	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
+	io.WriteString(c, string(parser.StringData(fullresync).Marshal()))
 }
 
 func sendErr(str string) string {
