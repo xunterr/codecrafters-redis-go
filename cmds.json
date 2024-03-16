@@ -24,5 +24,12 @@
     "options": {
       "REPLICATION": []
     }
+  },
+  "REPLCONF": {
+    "args": [],
+    "options": {
+      "LISTENING-PORT": ["string"],
+      "CAPA": ["string"]
+    }
   }
 }
