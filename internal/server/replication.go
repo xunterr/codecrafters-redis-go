@@ -56,15 +56,12 @@ func setCapabilities(c net.Conn) {
 	if !expect(res, "OK") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
+
 }
 
 func psync(c net.Conn) {
 	log.Println("Psync")
 	send(c, []string{"PSYNC", "?", "-1"})
-	_, err := read(c)
-	if err != nil {
-		log.Fatalf("Error reading server response: %s", err.Error())
-	}
 }
 
 func expect(res []string, str string) bool {
@@ -84,17 +81,20 @@ func send(c net.Conn, cmd []string) {
 }
 
 func read(c net.Conn) ([]string, error) {
+	var res []string
 	buff := make([]byte, 1024)
 	ln, err := c.Read(buff)
 	if err != nil {
 		return nil, err
 	}
 
-	parsed, err := parser.NewParser(string(buff[:ln])).Parse()
-	if err != nil {
-		return nil, err
+	p := parser.NewParser(string(buff[:ln]))
+	for !p.IsAtEnd() {
+		parsed, err := p.Parse()
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, parsed.Flat()...)
 	}
-
-	res := parsed.Flat()
 	return res, err
 }
