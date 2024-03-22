@@ -123,7 +123,7 @@ func (p *Parser) parseArray(length int) ([]Data, error) {
 
 func (p *Parser) scanString() string {
 	p.start = p.current
-	for (utils.IsAlfaNumeric(p.peek()) || utils.IsSpecial(p.peek())) && !p.isAtEnd() {
+	for (utils.IsAlfaNumeric(p.peek()) || utils.IsSpecial(p.peek())) && !p.IsAtEnd() {
 		p.current++
 	}
 
@@ -158,7 +158,7 @@ func (p *Parser) consume(msg string, seq ...byte) error {
 }
 
 func (p *Parser) peek() byte {
-	if p.isAtEnd() {
+	if p.IsAtEnd() {
 		return '\000'
 	}
 	return p.source[p.current]
@@ -171,7 +171,7 @@ func (p *Parser) peekNext() byte {
 	return p.source[p.current+1]
 }
 
-func (p Parser) isAtEnd() bool {
+func (p Parser) IsAtEnd() bool {
 	return p.current >= len(p.source)
 }
 
@@ -219,29 +219,30 @@ func (d Data) marshalSimple() (res []byte) {
 }
 
 func (d Data) marshalBulk() (res []byte) {
-	res = append(res, '$')
-
 	if d.null {
-		res = append(res, []byte("-1")...)
-		res = append(res, '\r', '\n')
+		res = append(res, d.marshallTypeHeader(TypeHeader{length: -1, dataType: BulkString})...)
 		return
 	}
 
 	value := d.string
-	res = append(res, []byte(strconv.FormatInt(int64(len(value)), 10))...)
-	res = append(res, '\r', '\n')
+	res = append(res, d.marshallTypeHeader(TypeHeader{length: len(value), dataType: BulkString})...)
 	res = append(res, []byte(value)...)
 	res = append(res, '\r', '\n')
 	return
 }
 
 func (d Data) marshalArray() (res []byte) {
-	res = append(res, '*')
 	value := d.array
-	res = append(res, []byte(strconv.FormatInt(int64(len(value)), 10))...)
-	res = append(res, '\r', '\n')
+	res = append(res, d.marshallTypeHeader(TypeHeader{length: len(value), dataType: Array})...)
 	for _, v := range value {
 		res = append(res, v.Marshal()...)
 	}
+	return
+}
+
+func (d Data) marshallTypeHeader(th TypeHeader) (res []byte) {
+	res = append(res, byte(th.dataType))
+	res = append(res, []byte(strconv.Itoa(th.length))...)
+	res = append(res, '\r', '\n')
 	return
 }

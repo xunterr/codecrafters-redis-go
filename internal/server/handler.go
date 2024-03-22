@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -123,6 +124,13 @@ func (h Handler) handlePsync(c net.Conn, cmd commands.Command) {
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
 	io.WriteString(c, string(parser.StringData(fullresync).Marshal()))
+
+	rdb, err := base64.StdEncoding.DecodeString("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
+	if err != nil {
+		io.WriteString(c, sendErr("Can't decode base64 RDB file"))
+	}
+
+	io.WriteString(c, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
 }
 
 func sendErr(str string) string {

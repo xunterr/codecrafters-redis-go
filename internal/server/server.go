@@ -95,25 +95,27 @@ func (s Server) handle(c net.Conn) {
 			}
 			break
 		}
+		p := parser.NewParser(string(buf[:ln]))
+		for !p.IsAtEnd() {
+			parsed, err := p.Parse()
+			if err != nil {
+				msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
+				log.Println(msg)
+				io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
+				continue
+			}
 
-		parsed, err := parser.NewParser(string(buf[:ln])).Parse()
-		if err != nil {
-			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
-			log.Println(msg)
-			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			continue
-		}
+			command, err := s.cmdParser.GetCommand(parsed.Flat())
+			if err != nil {
+				msg := fmt.Sprintf("Error parsing command: %s", err.Error())
+				io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
+				continue
+			}
 
-		command, err := s.cmdParser.GetCommand(parsed.Flat())
-		if err != nil {
-			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
-			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			continue
-		}
-
-		handler, ok := s.handlers[command.Name]
-		if ok {
-			go handler(c, command)
+			handler, ok := s.handlers[command.Name]
+			if ok {
+				go handler(c, command)
+			}
 		}
 	}
 }
