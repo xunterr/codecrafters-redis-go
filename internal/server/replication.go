@@ -103,6 +103,10 @@ func GetReplInfo() ReplInfo {
 }
 
 func RegisterReplica(host string, port string, listeningPort int) {
+	replInfo = ReplInfo{
+		Role: Slave,
+	}
+
 	c, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		log.Fatalf("Error connecting to the master: %s", err.Error())
