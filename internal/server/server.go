@@ -10,49 +10,23 @@ import (
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
-	"github.com/mitchellh/mapstructure"
 )
 
 type HandlerFunc func(c net.Conn, cmd commands.Command)
+type MiddlewareFunc func(c net.Conn, req []byte)
 
 type Server struct {
-	handlers  map[string]HandlerFunc
-	cmdParser commands.CommandParser
-	severInfo ServerInfo
+	handlers    map[string]HandlerFunc
+	middlewares []MiddlewareFunc
+	cmdParser   commands.CommandParser
 }
 
-type ServerRole string
-
-const (
-	Master ServerRole = "master"
-	Slave  ServerRole = "slave"
-)
-
-type ServerInfo struct {
-	Role       ServerRole `mapstructure:"role"`
-	ReplId     string     `mapstructure:"master_replid"`
-	ReplOffset int        `mapstructure:"master_repl_offset"`
-}
-
-func (si ServerInfo) ToMap() (res map[string]string, err error) {
-	err = mapstructure.Decode(si, &res)
-	return
-}
-
-func NewServer(cmdParser commands.CommandParser, role ServerRole) Server {
+func NewServer(cmdParser commands.CommandParser) Server {
 	return Server{
-		handlers:  map[string]HandlerFunc{},
-		cmdParser: cmdParser,
-		severInfo: ServerInfo{
-			Role:       role,
-			ReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-			ReplOffset: 0,
-		},
+		handlers:    map[string]HandlerFunc{},
+		middlewares: []MiddlewareFunc{}, // executes after request received and before it gets routed
+		cmdParser:   cmdParser,
 	}
-}
-
-func (s Server) GetServerInfo() ServerInfo {
-	return s.severInfo
 }
 
 func (s Server) Listen(addr string) {
@@ -82,6 +56,16 @@ func (s *Server) AddHandler(name string, handler HandlerFunc) {
 	s.handlers[name] = handler
 }
 
+func (s *Server) AddMiddleware(mw MiddlewareFunc) {
+	s.middlewares = append(s.middlewares, mw)
+}
+
+func (s Server) CallMiddlewares(c net.Conn, req []byte) { //add some datastruct to represent current state
+	for _, mw := range s.middlewares {
+		mw(c, req)
+	}
+}
+
 func (s Server) handle(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
@@ -95,6 +79,7 @@ func (s Server) handle(c net.Conn) {
 			}
 			break
 		}
+		s.CallMiddlewares(c, buf[:ln])
 		p := parser.NewParser(string(buf[:ln]))
 		for !p.IsAtEnd() {
 			parsed, err := p.Parse()
