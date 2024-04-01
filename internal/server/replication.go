@@ -5,14 +5,107 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"time"
 
-	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
+	"github.com/codecrafters-io/redis-starter-go/pkg/client"
 )
+
+type ReplInfo struct {
+	Role       ServerRole `mapstructure:"role"`
+	ReplId     string     `mapstructure:"master_replid"`
+	ReplOffset int        `mapstructure:"master_repl_offset"`
+}
+
+var replInfo ReplInfo
+
+type ServerRole string
+
+type Replica struct {
+	Conn  net.Conn
+	Addr  string
+	Capas []string
+	IsUp  bool
+}
+
+type MasterContext struct {
+	replicas []Replica
+}
+
+const (
+	Master ServerRole = "master"
+	Slave  ServerRole = "slave"
+)
+
+func SetAsMaster(server *Server) *MasterContext {
+	replInfo = ReplInfo{
+		Role:       Master,
+		ReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+		ReplOffset: 0,
+	}
+
+	mc := MasterContext{}
+	go mc.HealthCheck()
+	server.AddMiddleware(func(c net.Conn, req []byte) {
+		mc.Propagate(req)
+	})
+
+	return &mc
+}
+
+func (mc *MasterContext) HealthCheck() {
+	t := time.NewTicker(time.Second * 30)
+	for range t.C {
+		for i := 0; i < len(mc.replicas); i++ {
+			if !mc.replicas[i].IsUp {
+				c, err := net.Dial("tcp", mc.replicas[i].Addr)
+				if err == nil {
+					log.Printf("[HEALTHCHECK] Replica %s is UP again", mc.replicas[i].Addr)
+					mc.replicas[i].Conn = c
+					mc.replicas[i].IsUp = true
+				} else {
+					log.Println(err.Error())
+					continue
+				}
+			}
+		}
+	}
+}
+
+func (mc *MasterContext) MarkAsDown(idx int, msg string) {
+	log.Printf("[HEALTHCHECK] Replica %s is down: %s", mc.replicas[idx].Addr, msg)
+	mc.replicas[idx].IsUp = false
+}
+
+func (mc *MasterContext) AddReplica(addr string, capas []string) {
+	c, err := net.Dial("tcp", addr)
+	mc.replicas = append(mc.replicas, Replica{
+		Conn:  c,
+		Addr:  addr,
+		Capas: capas,
+		IsUp:  err == nil,
+	})
+}
+
+func (mc *MasterContext) Propagate(msg []byte) {
+	for i, r := range mc.replicas {
+		if r.IsUp {
+			_, err := r.Conn.Write(msg)
+			if err != nil {
+				mc.MarkAsDown(i, "Error writing to the connection")
+				continue
+			}
+		}
+	}
+}
+
+func GetReplInfo() ReplInfo {
+	return replInfo
+}
 
 func RegisterReplica(host string, port string, listeningPort int) {
 	c, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
-		log.Fatalf("Error connecting master: %s", err.Error())
+		log.Fatalf("Error connecting to the master: %s", err.Error())
 		return
 	}
 	pingMaster(c)
@@ -24,36 +117,36 @@ func RegisterReplica(host string, port string, listeningPort int) {
 
 func pingMaster(c net.Conn) {
 	log.Println("Ping master")
-	send(c, []string{"ping"})
-	res, err := read(c)
+	client.Send(c, []string{"ping"})
+	res, err := client.Read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !expect(res, "PONG") {
+	if !client.Expect(res, "PONG") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
 
 func setListeningPort(c net.Conn, lp int) {
 	log.Println("Set listening port")
-	send(c, []string{"REPLCONF", "listening-port", strconv.FormatInt(int64(lp), 10)})
-	res, err := read(c)
+	client.Send(c, []string{"REPLCONF", "listening-port", strconv.FormatInt(int64(lp), 10)})
+	res, err := client.Read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !expect(res, "OK") {
+	if !client.Expect(res, "OK") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
 
 func setCapabilities(c net.Conn) {
 	log.Println("Set capabilities")
-	send(c, []string{"REPLCONF", "capa", "psync2"})
-	res, err := read(c)
+	client.Send(c, []string{"REPLCONF", "capa", "psync2"})
+	res, err := client.Read(c)
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !expect(res, "OK") {
+	if !client.Expect(res, "OK") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 
@@ -61,40 +154,9 @@ func setCapabilities(c net.Conn) {
 
 func psync(c net.Conn) {
 	log.Println("Psync")
-	send(c, []string{"PSYNC", "?", "-1"})
-}
-
-func expect(res []string, str string) bool {
-	return len(res) != 0 && res[0] == str
-}
-
-func send(c net.Conn, cmd []string) {
-	var msg []parser.Data
-	for _, e := range cmd {
-		msg = append(msg, parser.BulkStringData(e))
-	}
-
-	_, err := c.Write(parser.ArrayData(msg).Marshal())
+	client.Send(c, []string{"PSYNC", "?", "-1"})
+	_, err := client.Read(c)
 	if err != nil {
-		log.Fatal(err.Error())
+		return
 	}
-}
-
-func read(c net.Conn) ([]string, error) {
-	var res []string
-	buff := make([]byte, 1024)
-	ln, err := c.Read(buff)
-	if err != nil {
-		return nil, err
-	}
-
-	p := parser.NewParser(string(buff[:ln]))
-	for !p.IsAtEnd() {
-		parsed, err := p.Parse()
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, parsed.Flat()...)
-	}
-	return res, err
 }

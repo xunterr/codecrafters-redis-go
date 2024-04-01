@@ -15,23 +15,21 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-type Handler struct {
+type BaseHandler struct {
 	storage storage.Storage
 	server  *Server
 }
 
-func Route(server Server, storage storage.Storage) {
-	handler := Handler{storage: storage, server: &server}
+func RouteBasic(server Server, storage storage.Storage) {
+	handler := BaseHandler{storage: storage, server: &server}
 	server.AddHandler("ECHO", handler.handleEcho)
 	server.AddHandler("SET", handler.handleSet)
 	server.AddHandler("GET", handler.handleGet)
 	server.AddHandler("PING", handler.handlePing)
 	server.AddHandler("INFO", handler.handleInfo)
-	server.AddHandler("REPLCONF", handler.handleReplconf)
-	server.AddHandler("PSYNC", handler.handlePsync)
 }
 
-func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handleEcho(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) < 1 {
 		io.WriteString(c, sendErr("Not enough arguments for the ECHO command"))
 		return
@@ -42,7 +40,7 @@ func (h Handler) handleEcho(c net.Conn, cmd commands.Command) {
 	}
 }
 
-func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handleSet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 2 {
 		io.WriteString(c, sendErr("SET command requirees exactly 2 arguments"))
 		return
@@ -77,7 +75,7 @@ func (h Handler) handleSet(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
-func (h Handler) handleGet(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handleGet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 1 {
 		io.WriteString(c, sendErr("GET command requires exactly 1 argument"))
 		return
@@ -92,13 +90,13 @@ func (h Handler) handleGet(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.StringData(val).Marshal()))
 }
 
-func (h Handler) handlePing(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handlePing(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, string(parser.StringData("PONG").Marshal()))
 }
 
-func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 	var info map[string]any
-	err := mapstructure.Decode(h.server.GetServerInfo(), &info)
+	err := mapstructure.Decode(GetReplInfo(), &info)
 	if err != nil {
 		io.WriteString(c, sendErr(err.Error()))
 		return
@@ -115,12 +113,27 @@ func (h Handler) handleInfo(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, resStr)
 }
 
-func (h Handler) handleReplconf(c net.Conn, cmd commands.Command) {
+type MasterHandler struct {
+	server Server
+	mc     *MasterContext
+}
+
+func RouteMaster(server Server, mc *MasterContext) {
+	handler := MasterHandler{server, mc}
+	server.AddHandler("REPLCONF", handler.handleReplconf)
+	server.AddHandler("PSYNC", handler.handlePsync)
+}
+
+func (h MasterHandler) handleReplconf(c net.Conn, cmd commands.Command) {
+	if lp, ok := cmd.Options["LISTENING-PORT"]; ok {
+		addr := strings.Split(c.RemoteAddr().String(), ":")[0]
+		h.mc.AddReplica(fmt.Sprintf("%s:%s", addr, lp[0]), []string{})
+	}
 	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
-func (h Handler) handlePsync(c net.Conn, cmd commands.Command) {
-	serverInfo := h.server.GetServerInfo()
+func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
+	serverInfo := GetReplInfo()
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
 	io.WriteString(c, string(parser.StringData(fullresync).Marshal()))
