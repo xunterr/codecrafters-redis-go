@@ -92,10 +92,12 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) { //this is so s
 }
 
 func (mc *MasterContext) SetReplica(replica Replica) {
+	log.Println("Adding new replica")
 	mc.replicas[replica.Conn.RemoteAddr().String()] = replica
 }
 
 func (mc *MasterContext) Propagate(req []byte) {
+	log.Printf("Propagating to %d replicas", len(mc.replicas))
 	for i, r := range mc.replicas {
 		if r.IsUp {
 			_, err := r.Conn.Write(req)
