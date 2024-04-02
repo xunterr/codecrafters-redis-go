@@ -33,6 +33,7 @@ func (s *Storage) SetWithTimer(key string, value string, expire int) error {
 }
 
 func (s *Storage) Set(key string, value string) error {
+	log.Printf("SET: %s - %s", key, value)
 	if _, ok := s.storage[key]; ok {
 		return errors.New("Key already exists")
 	}
@@ -41,6 +42,7 @@ func (s *Storage) Set(key string, value string) error {
 }
 
 func (s *Storage) Get(key string) (string, error) {
+	log.Printf("GET: %s", key)
 	value, ok := s.storage[key]
 	if !ok {
 		return "", errors.New("No such key")
