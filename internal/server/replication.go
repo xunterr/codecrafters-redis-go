@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -21,14 +22,14 @@ var replInfo ReplInfo
 type ServerRole string
 
 type Replica struct {
-	Conn  net.Conn
-	Addr  string
-	Capas []string
-	IsUp  bool
+	Conn       net.Conn
+	ServerAddr string
+	Capas      []string
+	IsUp       bool
 }
 
 type MasterContext struct {
-	replicas []Replica
+	replicas map[string]Replica
 }
 
 const (
@@ -43,11 +44,13 @@ func SetAsMaster(server *Server) *MasterContext {
 		ReplOffset: 0,
 	}
 
-	mc := MasterContext{}
+	mc := MasterContext{
+		make(map[string]Replica),
+	}
 	go mc.HealthCheck()
 	server.AddMiddleware(func(c net.Conn, req []byte) {
 		mc.Propagate(req)
-	})
+	}, []RequestType{Write})
 
 	return &mc
 }
@@ -55,13 +58,15 @@ func SetAsMaster(server *Server) *MasterContext {
 func (mc *MasterContext) HealthCheck() {
 	t := time.NewTicker(time.Second * 30)
 	for range t.C {
-		for i := 0; i < len(mc.replicas); i++ {
-			if !mc.replicas[i].IsUp {
-				c, err := net.Dial("tcp", mc.replicas[i].Addr)
+		for k := range mc.replicas {
+			if !mc.replicas[k].IsUp {
+				repl := mc.replicas[k]
+				c, err := net.Dial("tcp", repl.Conn.RemoteAddr().String())
 				if err == nil {
-					log.Printf("[HEALTHCHECK] Replica %s is UP again", mc.replicas[i].Addr)
-					mc.replicas[i].Conn = c
-					mc.replicas[i].IsUp = true
+					log.Printf("[HEALTHCHECK] Replica %s is UP again", k)
+					repl.Conn = c
+					repl.IsUp = true
+					mc.replicas[k] = repl
 				} else {
 					log.Println(err.Error())
 					continue
@@ -71,25 +76,29 @@ func (mc *MasterContext) HealthCheck() {
 	}
 }
 
-func (mc *MasterContext) MarkAsDown(idx int, msg string) {
-	log.Printf("[HEALTHCHECK] Replica %s is down: %s", mc.replicas[idx].Addr, msg)
-	mc.replicas[idx].IsUp = false
+func (mc *MasterContext) MarkAsDown(addr string, msg string) {
+	log.Printf("[HEALTHCHECK] Replica %s is down: %s", addr, msg)
+	repl := mc.replicas[addr]
+	repl.IsUp = false
+	mc.replicas[addr] = repl
 }
 
-func (mc *MasterContext) AddReplica(addr string, capas []string) {
-	c, err := net.Dial("tcp", addr)
-	mc.replicas = append(mc.replicas, Replica{
-		Conn:  c,
-		Addr:  addr,
-		Capas: capas,
-		IsUp:  err == nil,
-	})
+func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) { //this is so silly :3 (i hate this)
+	repl, ok := mc.replicas[c.RemoteAddr().String()]
+	if !ok {
+		return Replica{}, errors.New("No such replica")
+	}
+	return repl, nil
 }
 
-func (mc *MasterContext) Propagate(msg []byte) {
+func (mc *MasterContext) SetReplica(replica Replica) {
+	mc.replicas[replica.Conn.RemoteAddr().String()] = replica
+}
+
+func (mc *MasterContext) Propagate(req []byte) {
 	for i, r := range mc.replicas {
 		if r.IsUp {
-			_, err := r.Conn.Write(msg)
+			_, err := r.Conn.Write(req)
 			if err != nil {
 				mc.MarkAsDown(i, "Error writing to the connection")
 				continue
@@ -102,7 +111,7 @@ func GetReplInfo() ReplInfo {
 	return replInfo
 }
 
-func RegisterReplica(host string, port string, listeningPort int) {
+func RegisterReplica(sv *Server, host string, port string, listeningPort int) {
 	replInfo = ReplInfo{
 		Role: Slave,
 	}
@@ -116,7 +125,7 @@ func RegisterReplica(host string, port string, listeningPort int) {
 	setListeningPort(c, listeningPort)
 	setCapabilities(c)
 	psync(c)
-	c.Close()
+	go sv.Handle(c)
 }
 
 func pingMaster(c net.Conn) {

@@ -15,16 +15,43 @@ import (
 type HandlerFunc func(c net.Conn, cmd commands.Command)
 type MiddlewareFunc func(c net.Conn, req []byte)
 
+type middleware struct {
+	middlewareFunc MiddlewareFunc
+	requestTypes   map[RequestType]struct{}
+}
+
 type Server struct {
 	handlers    map[string]HandlerFunc
-	middlewares []MiddlewareFunc
+	middlewares []middleware
 	cmdParser   commands.CommandParser
+}
+
+type RequestType int
+
+const (
+	Any RequestType = iota
+	Write
+	Read
+	Info
+)
+
+func GetRequestType(cmd commands.Command) RequestType {
+	switch cmd.Type {
+	case commands.ReadCommand:
+		return Read
+	case commands.InfoCommand:
+		return Info
+	case commands.WriteCommand:
+		return Write
+	default:
+		return Any
+	}
 }
 
 func NewServer(cmdParser commands.CommandParser) Server {
 	return Server{
 		handlers:    map[string]HandlerFunc{},
-		middlewares: []MiddlewareFunc{}, // executes after request received and before it gets routed
+		middlewares: []middleware{}, // executes after request received and before it gets routed
 		cmdParser:   cmdParser,
 	}
 }
@@ -45,7 +72,7 @@ func (s Server) Listen(addr string) {
 		log.Printf("Accepted: %s", c.RemoteAddr().String())
 
 		go func(c net.Conn) {
-			s.handle(c)
+			s.Handle(c)
 			c.Close()
 		}(c)
 	}
@@ -56,17 +83,24 @@ func (s *Server) AddHandler(name string, handler HandlerFunc) {
 	s.handlers[name] = handler
 }
 
-func (s *Server) AddMiddleware(mw MiddlewareFunc) {
-	s.middlewares = append(s.middlewares, mw)
+func (s *Server) AddMiddleware(mf MiddlewareFunc, rqTypes []RequestType) {
+	rqTypesMap := make(map[RequestType]struct{})
+	for _, e := range rqTypes {
+		rqTypesMap[e] = struct{}{}
+	}
+	s.middlewares = append(s.middlewares, middleware{mf, rqTypesMap})
 }
 
-func (s Server) CallMiddlewares(c net.Conn, req []byte) { //add some datastruct to represent current state
+func (s Server) CallMiddlewares(c net.Conn, req []byte, rqType RequestType) { //add some datastruct to represent current state
 	for _, mw := range s.middlewares {
-		mw(c, req)
+		_, isAnyType := mw.requestTypes[rqType]
+		if _, ok := mw.requestTypes[rqType]; ok || isAnyType {
+			mw.middlewareFunc(c, req)
+		}
 	}
 }
 
-func (s Server) handle(c net.Conn) {
+func (s Server) Handle(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
@@ -79,7 +113,7 @@ func (s Server) handle(c net.Conn) {
 			}
 			break
 		}
-		s.CallMiddlewares(c, buf[:ln])
+		log.Printf("[%s]: %q", c.RemoteAddr().String(), string(buf[:ln]))
 		p := parser.NewParser(string(buf[:ln]))
 		for !p.IsAtEnd() {
 			parsed, err := p.Parse()
@@ -96,6 +130,8 @@ func (s Server) handle(c net.Conn) {
 				io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
 				continue
 			}
+
+			s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
 
 			handler, ok := s.handlers[command.Name]
 			if ok {

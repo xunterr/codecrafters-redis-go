@@ -51,7 +51,7 @@ func main() {
 	}()
 
 	if MASTER_HOST != "" && len(flag.Args()) > 0 {
-		server.RegisterReplica(MASTER_HOST, flag.Arg(0), PORT)
+		server.RegisterReplica(&sv, MASTER_HOST, flag.Arg(0), PORT)
 	} else {
 		mc := server.SetAsMaster(&sv)
 		server.RouteMaster(sv, mc)

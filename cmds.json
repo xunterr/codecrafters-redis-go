@@ -1,39 +1,51 @@
 {
+  "OK": {
+    "args": [],
+    "options": {},
+    "type": "info"
+  },
   "ECHO": {
     "args": [
       "string"
     ],
-    "options": {}
+    "options": {},
+    "type": "read"
   },
   "SET": {
     "args": ["string", "string"],
     "options": {
         "PX": ["string"]
-      }
+      },
+    "type": "write"
   },
   "GET": {
     "args": ["string"],
-    "options": {}
+    "options": {},
+    "type": "read"
   },
   "PING": {
     "args": [],
-    "options": {}
+    "options": {},
+    "type": "info"
   },
   "INFO": {
     "args": [],
     "options": {
       "REPLICATION": []
-    }
+    },
+    "type": "info"
   },
   "REPLCONF": {
     "args": [],
     "options": {
       "LISTENING-PORT": ["string"],
       "CAPA": ["string"]
-    }
+    },
+    "type": "info"
   },
   "PSYNC": {
     "args": ["string", "string"],
-    "options": {}
+    "options": {},
+    "type": "info"
   }
 }
