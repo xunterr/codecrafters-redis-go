@@ -114,26 +114,46 @@ func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 }
 
 type MasterHandler struct {
-	server Server
-	mc     *MasterContext
+	server   Server
+	mc       *MasterContext
+	sessions map[string]Replica
 }
 
 func RouteMaster(server Server, mc *MasterContext) {
-	handler := MasterHandler{server, mc}
+	handler := MasterHandler{server, mc, map[string]Replica{}}
 	server.AddHandler("REPLCONF", handler.handleReplconf)
 	server.AddHandler("PSYNC", handler.handlePsync)
 }
 
 func (h MasterHandler) handleReplconf(c net.Conn, cmd commands.Command) {
-	if lp, ok := cmd.Options["LISTENING-PORT"]; ok {
-		addr := strings.Split(c.RemoteAddr().String(), ":")[0]
-		h.mc.AddReplica(fmt.Sprintf("%s:%s", addr, lp[0]), []string{})
+	repl, err := h.mc.GetReplica(c)
+	if err != nil {
+		repl = Replica{
+			Conn: c,
+			IsUp: false,
+		}
+		h.mc.SetReplica(repl)
 	}
+
+	if lp, ok := cmd.Options["LISTENING-PORT"]; ok {
+		host := strings.Split(c.RemoteAddr().String(), ":")[0]
+		addr := fmt.Sprintf("%s:%s", host, lp[0])
+		repl.ServerAddr = addr
+	} else if capa, ok := cmd.Options["CAPA"]; ok {
+		repl.Capas = capa
+	}
+
+	h.mc.SetReplica(repl)
 	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
 func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 	serverInfo := GetReplInfo()
+	replica, err := h.mc.GetReplica(c)
+	if err != nil {
+		io.WriteString(c, sendErr(err.Error()))
+		return
+	}
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
 	io.WriteString(c, string(parser.StringData(fullresync).Marshal()))
@@ -144,6 +164,8 @@ func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 	}
 
 	io.WriteString(c, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
+	replica.IsUp = true
+	h.mc.SetReplica(replica)
 }
 
 func sendErr(str string) string {

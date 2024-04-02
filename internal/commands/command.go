@@ -12,7 +12,16 @@ import (
 type CommandInfo struct {
 	Args    []string
 	Options map[string][]string
+	Type    CommandType
 }
+
+type CommandType string
+
+const (
+	WriteCommand CommandType = "write"
+	ReadCommand  CommandType = "read"
+	InfoCommand  CommandType = "info"
+)
 
 func LoadJSON(filename string) (map[string]CommandInfo, error) {
 	jsonFile, err := os.Open(filename)
@@ -40,6 +49,7 @@ type Command struct {
 	Name      string
 	Options   map[string][]string
 	Arguments []string
+	Type      CommandType
 }
 
 func (p CommandParser) GetCommand(req []string) (Command, error) {
@@ -59,7 +69,7 @@ func (p CommandParser) GetCommand(req []string) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	return Command{commandName, options, args}, nil
+	return Command{commandName, options, args, cmdInfo.Type}, nil
 }
 
 func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
