@@ -101,10 +101,11 @@ func (s Server) CallMiddlewares(c net.Conn, req []byte, rqType RequestType) { //
 }
 
 func (s Server) Handle(c net.Conn) {
+	log.Printf("Handling commands from %s", c.RemoteAddr().String())
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
-
+		log.Printf("Received data from %s", c.RemoteAddr().String())
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading request: %s", err.Error())
