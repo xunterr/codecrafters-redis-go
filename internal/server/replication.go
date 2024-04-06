@@ -170,7 +170,8 @@ func setCapabilities(c net.Conn) {
 func psync(c net.Conn) {
 	log.Println("Psync")
 	client.Send(c, []string{"PSYNC", "?", "-1"})
-	_, err := client.Read(c)
+	r, err := client.Read(c)
+	log.Printf("Received data: %s", r)
 	if err != nil {
 		return
 	}
