@@ -7,7 +7,16 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/codecrafters-io/redis-starter-go/pkg/trie"
 )
+
+type Command struct {
+	Name      string
+	Options   map[string][]string
+	Arguments []string
+	Type      CommandType
+}
 
 type CommandInfo struct {
 	Args    []string
@@ -37,22 +46,23 @@ func LoadJSON(filename string) (map[string]CommandInfo, error) {
 	return table, err
 }
 
-type CommandParser struct {
+type CommandParser interface {
+	GetCommand(in []string) (Command, error)
+}
+
+type DefaultCommandParser struct {
 	cmdTable map[string]CommandInfo
 }
 
-func NewCommandParser(cmdTable map[string]CommandInfo) CommandParser {
-	return CommandParser{cmdTable}
+type ReplicaCommandParser struct {
+	cmdTable *trie.Trie[CommandInfo]
 }
 
-type Command struct {
-	Name      string
-	Options   map[string][]string
-	Arguments []string
-	Type      CommandType
+func NewDefaultCommandParser(cmdTable map[string]CommandInfo) CommandParser {
+	return DefaultCommandParser{cmdTable}
 }
 
-func (p CommandParser) GetCommand(req []string) (Command, error) {
+func (p DefaultCommandParser) GetCommand(req []string) (Command, error) {
 	commandName := strings.ToUpper(req[0])
 	cmdInfo, ok := p.cmdTable[commandName]
 
@@ -72,7 +82,7 @@ func (p CommandParser) GetCommand(req []string) (Command, error) {
 	return Command{commandName, options, args, cmdInfo.Type}, nil
 }
 
-func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
+func (p DefaultCommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
 	res := make(map[string][]string)
 	var currentOption string
 	for i := 0; i < len(input); i++ {
@@ -100,10 +110,25 @@ func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[st
 	return res, nil
 }
 
-func (p CommandParser) parseArguments(input []string, cmdInfo CommandInfo) ([]string, error) {
+func (p DefaultCommandParser) parseArguments(input []string, cmdInfo CommandInfo) ([]string, error) {
 	if len(input) < len(cmdInfo.Args) {
 		return nil, errors.New("Too few arguments")
 	}
 
 	return input[:len(cmdInfo.Args)], nil
+}
+
+func NewReplicaCommandParser(cmdTable map[string]CommandInfo) CommandParser {
+	t := trie.NewTrie[CommandInfo]()
+	for k, v := range cmdTable {
+		t.Put(k, v)
+	}
+
+	return ReplicaCommandParser{
+		cmdTable: &t,
+	}
+}
+
+func (p ReplicaCommandParser) GetCommand(in []string) (Command, error) {
+	return Command{}, nil //TODO
 }

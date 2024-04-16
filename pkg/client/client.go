@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"net"
 
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
@@ -23,21 +24,22 @@ func Send(c net.Conn, cmd []string) error {
 	return nil
 }
 
-func Read(c net.Conn) ([]string, error) {
-	var res []string
+func Read(c net.Conn) ([][]string, error) {
+	var res [][]string
 	buff := make([]byte, 1024)
 	ln, err := c.Read(buff)
 	if err != nil {
 		return nil, err
 	}
 
+	var errs error
 	p := parser.NewParser(string(buff[:ln]))
 	for !p.IsAtEnd() {
 		parsed, err := p.Parse()
 		if err != nil {
-			return nil, err
+			errs = errors.Join(errs, err)
 		}
-		res = append(res, parsed.Flat()...)
+		res = append(res, parsed.Flat())
 	}
 	return res, err
 }

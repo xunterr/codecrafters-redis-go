@@ -86,10 +86,7 @@ func (p *Parser) Parse() (*Data, error) {
 	default:
 		err = errors.New(fmt.Sprintf("Unknown type: %s", string(typeHeader.dataType)))
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return &data, err
 }
 
 func (p *Parser) parseTypeHeader() (TypeHeader, error) {

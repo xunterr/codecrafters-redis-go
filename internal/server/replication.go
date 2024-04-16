@@ -135,7 +135,7 @@ func pingMaster(c net.Conn) {
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !client.Expect(res, "PONG") {
+	if !client.Expect(res[0], "PONG") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
@@ -147,7 +147,7 @@ func setListeningPort(c net.Conn, lp int) {
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !client.Expect(res, "OK") {
+	if !client.Expect(res[0], "OK") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 }
@@ -159,7 +159,7 @@ func setCapabilities(c net.Conn) {
 	if err != nil {
 		log.Fatalf("Error reading server response: %s", err.Error())
 	}
-	if !client.Expect(res, "OK") {
+	if !client.Expect(res[0], "OK") {
 		log.Fatalf("Unexpected server response: %v", res)
 	}
 
