@@ -104,7 +104,7 @@ func (s Server) Serve(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
-
+		log.Printf("Received data from %s", c.RemoteAddr().String())
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading request: %s", err.Error())
