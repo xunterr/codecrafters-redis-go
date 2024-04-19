@@ -1,7 +1,7 @@
 *3
 $3
-set123
+set
 $3
-key2
+key
 $2
 hi

@@ -72,7 +72,7 @@ func (s Server) Listen(addr string) {
 		log.Printf("Accepted: %s", c.RemoteAddr().String())
 
 		go func(c net.Conn) {
-			s.Handle(c)
+			s.Serve(c)
 			c.Close()
 		}(c)
 	}
@@ -100,7 +100,7 @@ func (s Server) CallMiddlewares(c net.Conn, req []byte, rqType RequestType) { //
 	}
 }
 
-func (s Server) Handle(c net.Conn) {
+func (s Server) Serve(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
@@ -114,29 +114,37 @@ func (s Server) Handle(c net.Conn) {
 			break
 		}
 		log.Printf("[%s]: %q", c.RemoteAddr().String(), string(buf[:ln]))
-		p := parser.NewParser(string(buf[:ln]))
-		for !p.IsAtEnd() {
-			parsed, err := p.Parse()
-			if err != nil {
-				msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
-				log.Println(msg)
-				io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-				continue
-			}
+		go s.route(c, string(buf[:ln]))
+	}
+}
 
-			command, err := s.cmdParser.GetCommand(parsed.Flat())
-			if err != nil {
-				msg := fmt.Sprintf("Error parsing command: %s", err.Error())
-				io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-				continue
-			}
+func (s *Server) route(c net.Conn, input string) {
+	p := parser.NewParser(input)
+	for !p.IsAtEnd() {
+		parsed, err := p.Parse()
+		log.Printf("%v", parsed)
+		if err != nil {
+			log.Println(err.Error())
+		}
+		if parsed == nil {
+			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
+			log.Println(msg)
+			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
+			continue
+		}
 
-			s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
+		command, err := s.cmdParser.ParseCommand(parsed.Flat())
+		if err != nil {
+			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
+			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
+			continue
+		}
 
-			handler, ok := s.handlers[command.Name]
-			if ok {
-				go handler(c, command)
-			}
+		s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
+
+		handler, ok := s.handlers[command.Name]
+		if ok {
+			handler(c, command)
 		}
 	}
 }

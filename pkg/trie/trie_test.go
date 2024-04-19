@@ -12,7 +12,7 @@ func CreateTestTrie() *Trie[bool] {
 			},
 		},
 	}
-	return &trie
+	return trie
 }
 
 func TestTriePut(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTrieGet(t *testing.T) {
 func TestTrieBestMatch(t *testing.T) {
 	trie := CreateTestTrie()
 	_, v, err := trie.GetBestMatch("hiwowo")
-	if err != nil || v != true {
+	if err != nil || *v != true {
 		t.Fatal("Failed to get best match")
 	}
 }

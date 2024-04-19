@@ -11,7 +11,7 @@ func IsDigit(c byte) bool {
 func IsAlfa(c byte) bool {
 	return (c >= 'a' && c <= 'z') ||
 		(c >= 'A' && c <= 'Z') ||
-		c == '_'
+		c == '_' || c == ' '
 }
 
 func IsAlfaNumeric(c byte) bool {

@@ -14,12 +14,20 @@ type Trie[T interface{}] struct {
 	root *Node[T]
 }
 
-func NewTrie[T interface{}]() Trie[T] {
-	return Trie[T]{
+func NewTrie[T interface{}]() *Trie[T] {
+	return &Trie[T]{
 		root: &Node[T]{
 			next: make(map[byte]*Node[T]),
 		},
 	}
+}
+
+func FromMap[T interface{}](from map[string]T) *Trie[T] {
+	trie := NewTrie[T]()
+	for k, v := range from {
+		trie.Put(k, v)
+	}
+	return trie
 }
 
 func (t *Trie[T]) Put(key string, value T) {
@@ -50,7 +58,7 @@ func (t Trie[T]) Get(key string) (T, error) {
 	return node.value, nil
 }
 
-func (t Trie[T]) GetBestMatch(key string) (string, T, error) {
+func (t Trie[T]) GetBestMatch(key string) (string, *T, error) {
 	node := t.root
 	var resKey []byte
 
@@ -62,5 +70,9 @@ func (t Trie[T]) GetBestMatch(key string) (string, T, error) {
 		resKey = append(resKey, b)
 		node = v
 	}
-	return string(resKey), node.value, nil
+
+	if node == t.root {
+		return "", nil, errors.New(fmt.Sprintf("No matches found for key %s", key))
+	}
+	return string(resKey), &node.value, nil
 }
