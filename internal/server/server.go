@@ -141,7 +141,6 @@ func (s *Server) route(c net.Conn, input string) {
 		}
 
 		s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
-
 		handler, ok := s.handlers[command.Name]
 		if ok {
 			handler(c, command)
