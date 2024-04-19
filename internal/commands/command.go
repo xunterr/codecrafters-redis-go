@@ -7,20 +7,36 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/codecrafters-io/redis-starter-go/pkg/trie"
 )
+
+type Command struct {
+	Name      string
+	Options   map[string][]string
+	Arguments []string
+	Type      CommandType
+}
 
 type CommandInfo struct {
 	Args    []string
 	Options map[string][]string
 	Type    CommandType
+	Policy  CommandPolicy
 }
 
 type CommandType string
+type CommandPolicy string
 
 const (
 	WriteCommand CommandType = "write"
 	ReadCommand  CommandType = "read"
 	InfoCommand  CommandType = "info"
+)
+
+const (
+	Match      CommandPolicy = "match"
+	StartsWith CommandPolicy = "startsWith"
 )
 
 func LoadJSON(filename string) (map[string]CommandInfo, error) {
@@ -38,26 +54,22 @@ func LoadJSON(filename string) (map[string]CommandInfo, error) {
 }
 
 type CommandParser struct {
-	cmdTable map[string]CommandInfo
+	cmdTable *trie.Trie[CommandInfo]
 }
 
 func NewCommandParser(cmdTable map[string]CommandInfo) CommandParser {
-	return CommandParser{cmdTable}
+	return CommandParser{
+		cmdTable: trie.FromMap[CommandInfo](cmdTable),
+	}
 }
 
-type Command struct {
-	Name      string
-	Options   map[string][]string
-	Arguments []string
-	Type      CommandType
-}
-
-func (p CommandParser) GetCommand(req []string) (Command, error) {
+func (p CommandParser) ParseCommand(req []string) (Command, error) {
 	commandName := strings.ToUpper(req[0])
-	cmdInfo, ok := p.cmdTable[commandName]
 
-	if !ok {
-		return Command{}, errors.New(fmt.Sprintf("Unknown command: %s", req[0]))
+	cmdInfo, err := p.getCommandInfo(commandName)
+
+	if err != nil {
+		return Command{}, err
 	}
 
 	args, err := p.parseArguments(req[1:], cmdInfo)
@@ -70,6 +82,19 @@ func (p CommandParser) GetCommand(req []string) (Command, error) {
 		return Command{}, err
 	}
 	return Command{commandName, options, args, cmdInfo.Type}, nil
+}
+
+func (p CommandParser) getCommandInfo(cmdName string) (CommandInfo, error) {
+	k, v, err := p.cmdTable.GetBestMatch(cmdName)
+	if err != nil {
+		return CommandInfo{}, errors.New(fmt.Sprintf("Unknown command: %s", cmdName))
+	}
+
+	if k != cmdName && v.Policy != StartsWith {
+		return CommandInfo{}, errors.New(fmt.Sprintf("Can't find matching command for %s", cmdName))
+	}
+
+	return *v, nil
 }
 
 func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {

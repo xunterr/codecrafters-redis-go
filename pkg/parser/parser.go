@@ -80,16 +80,16 @@ func (p *Parser) Parse() (*Data, error) {
 		value, err = p.parseArray(typeHeader.length)
 		data.array = value.([]Data)
 	case BulkString, String, Error:
-		value = p.scanString()
-		err = p.consume("Expecting CRLF after value", '\r', '\n')
+		value, err = p.scanString(typeHeader.length)
+		if err != nil {
+			return nil, err
+		}
+		err = p.consume('\r', '\n')
 		data.string = value.(string)
 	default:
 		err = errors.New(fmt.Sprintf("Unknown type: %s", string(typeHeader.dataType)))
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &data, nil
+	return &data, err
 }
 
 func (p *Parser) parseTypeHeader() (TypeHeader, error) {
@@ -100,9 +100,9 @@ func (p *Parser) parseTypeHeader() (TypeHeader, error) {
 
 	if !IsSimple(DataType(typeChar)) {
 		length = p.parseNumber()
-		err := p.consume("Expecting CRLF after type header", '\r', '\n')
+		err := p.consume('\r', '\n')
 		if err != nil {
-			return TypeHeader{}, err
+			return TypeHeader{}, errors.New("Expected CRLF after type header")
 		}
 	}
 
@@ -121,14 +121,20 @@ func (p *Parser) parseArray(length int) ([]Data, error) {
 	return value, nil
 }
 
-func (p *Parser) scanString() string {
-	p.start = p.current
-	for (utils.IsAlfaNumeric(p.peek()) || utils.IsSpecial(p.peek())) && !p.IsAtEnd() {
-		p.current++
+func (p *Parser) scanString(length int) (string, error) {
+	if length == 0 {
+		for (p.peek() != '\r' && p.peekNext() != '\n') && !p.IsAtEnd() {
+			length++
+		}
 	}
 
-	literal := p.source[p.start:p.current]
-	return literal
+	if p.start+length > len(p.source)-1 {
+		return "", errors.New("Provided length is larger than a source string")
+	}
+
+	literal := p.source[p.current : p.current+length]
+	p.current = p.current + length
+	return literal, nil
 }
 
 func (p *Parser) parseNumber() int {
@@ -146,11 +152,11 @@ func (p *Parser) parseNumber() int {
 	return value
 }
 
-func (p *Parser) consume(msg string, seq ...byte) error {
+func (p *Parser) consume(seq ...byte) error {
 	for _, value := range seq {
 		toConsume := p.peek()
 		if toConsume != value {
-			return errors.New(msg)
+			return errors.New(fmt.Sprintf("Unexpected char: %s", string(toConsume)))
 		}
 		p.current++
 	}
@@ -165,7 +171,7 @@ func (p *Parser) peek() byte {
 }
 
 func (p *Parser) peekNext() byte {
-	if p.current+1 > len(p.source) {
+	if p.current+1 > len(p.source)-1 {
 		return '\000'
 	}
 	return p.source[p.current+1]

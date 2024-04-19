@@ -92,14 +92,16 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) { //this is so s
 }
 
 func (mc *MasterContext) SetReplica(replica Replica) {
-	log.Println("Adding new replica")
+	log.Println("Configuring replica..")
 	mc.replicas[replica.Conn.RemoteAddr().String()] = replica
 }
 
 func (mc *MasterContext) Propagate(req []byte) {
 	log.Printf("Propagating to %d replicas", len(mc.replicas))
+	log.Printf("%v", mc.replicas)
 	for i, r := range mc.replicas {
 		if r.IsUp {
+			log.Printf("Propagating to %s", r.Conn.RemoteAddr())
 			_, err := r.Conn.Write(req)
 			if err != nil {
 				mc.MarkAsDown(i, "Error writing to the connection")
@@ -123,55 +125,29 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) {
 		log.Fatalf("Error connecting to the master: %s", err.Error())
 		return
 	}
+	go sv.Serve(c)
 	pingMaster(c)
 	setListeningPort(c, listeningPort)
 	setCapabilities(c)
 	psync(c)
-	go sv.Handle(c)
 }
 
 func pingMaster(c net.Conn) {
 	log.Println("Ping master")
 	client.Send(c, []string{"ping"})
-	res, err := client.Read(c)
-	if err != nil {
-		log.Fatalf("Error reading server response: %s", err.Error())
-	}
-	if !client.Expect(res, "PONG") {
-		log.Fatalf("Unexpected server response: %v", res)
-	}
 }
 
 func setListeningPort(c net.Conn, lp int) {
 	log.Println("Set listening port")
 	client.Send(c, []string{"REPLCONF", "listening-port", strconv.FormatInt(int64(lp), 10)})
-	res, err := client.Read(c)
-	if err != nil {
-		log.Fatalf("Error reading server response: %s", err.Error())
-	}
-	if !client.Expect(res, "OK") {
-		log.Fatalf("Unexpected server response: %v", res)
-	}
 }
 
 func setCapabilities(c net.Conn) {
 	log.Println("Set capabilities")
 	client.Send(c, []string{"REPLCONF", "capa", "psync2"})
-	res, err := client.Read(c)
-	if err != nil {
-		log.Fatalf("Error reading server response: %s", err.Error())
-	}
-	if !client.Expect(res, "OK") {
-		log.Fatalf("Unexpected server response: %v", res)
-	}
-
 }
 
 func psync(c net.Conn) {
 	log.Println("Psync")
 	client.Send(c, []string{"PSYNC", "?", "-1"})
-	_, err := client.Read(c)
-	if err != nil {
-		return
-	}
 }

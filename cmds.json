@@ -2,38 +2,44 @@
   "OK": {
     "args": [],
     "options": {},
-    "type": "info"
+    "type": "info",
+    "policy": "match"
   },
   "ECHO": {
     "args": [
       "string"
     ],
     "options": {},
-    "type": "read"
+    "type": "read",
+    "policy": "match"
   },
   "SET": {
     "args": ["string", "string"],
     "options": {
         "PX": ["string"]
       },
-    "type": "write"
+    "type": "write",
+    "policy": "match"
   },
   "GET": {
     "args": ["string"],
     "options": {},
-    "type": "read"
+    "type": "read",
+    "policy": "match"
   },
   "PING": {
     "args": [],
     "options": {},
-    "type": "info"
+    "type": "info",
+    "policy": "match"
   },
   "INFO": {
     "args": [],
     "options": {
       "REPLICATION": []
     },
-    "type": "info"
+    "type": "info",
+    "policy": "match"
   },
   "REPLCONF": {
     "args": [],
@@ -41,11 +47,31 @@
       "LISTENING-PORT": ["string"],
       "CAPA": ["string"]
     },
-    "type": "info"
+    "type": "info",
+    "policy": "match"
   },
   "PSYNC": {
     "args": ["string", "string"],
     "options": {},
-    "type": "info"
+    "type": "info",
+    "policy": "match"
+  },
+  "REDIS": {
+    "args": [],
+    "options": {},
+    "type": "write",
+    "policy": "startsWith"
+  },
+  "FULLRESYNC": {
+    "args": [],
+    "options": {},
+    "type": "write",
+    "policy": "startsWith"
+  },
+  "PONG": {
+    "args": [],
+    "options": {},
+    "type": "info",
+    "policy": "match"
   }
 }

@@ -13,7 +13,11 @@ func TestParseArray(t *testing.T) {
 		current: 0,
 	}
 
-	data, _ := parser.Parse()
+	data, err := parser.Parse()
+
+	if err != nil {
+		t.Error(err.Error())
+	}
 
 	if data.dataType != Array {
 		t.Errorf("Wrong container data type. Have: %d, want: %d (Array)", data.dataType, Array)
@@ -26,7 +30,7 @@ func TestParseArray(t *testing.T) {
 
 	for _, data := range array {
 		if data.dataType != BulkString {
-			t.Errorf("Wrong array content type. Have: %s, want: %s (String)", string(data.dataType), string(BulkString))
+			t.Errorf("Wrong array content type. Have: %s, want: %s (BulkString)", string(data.dataType), string(BulkString))
 		}
 	}
 }
