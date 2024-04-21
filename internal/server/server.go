@@ -104,7 +104,7 @@ func (s Server) Serve(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
-
+		log.Printf("Received data from %s", c.RemoteAddr().String())
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading request: %s", err.Error())
@@ -122,7 +122,6 @@ func (s *Server) route(c net.Conn, input string) {
 	p := parser.NewParser(input)
 	for !p.IsAtEnd() {
 		parsed, err := p.Parse()
-		log.Printf("%v", parsed)
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -141,7 +140,6 @@ func (s *Server) route(c net.Conn, input string) {
 		}
 
 		s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
-
 		handler, ok := s.handlers[command.Name]
 		if ok {
 			handler(c, command)
