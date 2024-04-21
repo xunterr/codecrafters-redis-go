@@ -8,7 +8,7 @@
 
 module github.com/codecrafters-io/redis-starter-go
 
-go 1.19
+go 1.22
 
 require (
 	github.com/dghubble/trie v0.1.0 // indirect
