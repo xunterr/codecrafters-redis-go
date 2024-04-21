@@ -178,13 +178,15 @@ func (rc ReplicaContext) onReplHandshakeStateChange(e *fsm.Event) {
 		setListeningPort(rc.masterConn, rc.listeningPort)
 	case ReplconfCapa:
 		setCapabilities(rc.masterConn)
+	case Psync:
+		psync(rc.masterConn)
 	}
 }
 
 func (rc ReplicaContext) OnOk() {
 	err := rc.handshakeFsm.Event(context.Background(), "onOK")
 	if err != nil {
-		log.Println("Unexpected command from master: PONG")
+		log.Println("Unexpected command from master")
 	}
 }
 

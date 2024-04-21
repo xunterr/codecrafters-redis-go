@@ -191,6 +191,7 @@ func (h ReplicaHandler) HandlePong(c net.Conn, cmd commands.Command) {
 }
 
 func (h ReplicaHandler) HandleOK(c net.Conn, cmd commands.Command) {
+	println("OK")
 	if c != h.replicaCtx.masterConn {
 		io.WriteString(c, sendErr("Unexpected command"))
 		return
