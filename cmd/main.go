@@ -38,13 +38,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	isReplica := MASTER_HOST != "" && len(flag.Args()) > 0
-
 	cmdParser := commands.NewCommandParser(table)
 
 	sv := server.NewServer(cmdParser)
 	storage := storage.NewStorage()
-	server.RouteBasic(sv, *storage, isReplica)
+	server.RouteBasic(sv, *storage)
 
 	wg.Add(1)
 	go func() {
@@ -52,7 +50,7 @@ func main() {
 		wg.Done()
 	}()
 
-	if isReplica {
+	if MASTER_HOST != "" && len(flag.Args()) > 0 {
 		server.RegisterReplica(&sv, MASTER_HOST, flag.Arg(0), PORT)
 	} else {
 		mc := server.SetAsMaster(&sv)

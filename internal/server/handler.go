@@ -18,11 +18,10 @@ import (
 type BaseHandler struct {
 	storage storage.Storage
 	server  *Server
-	silent  bool
 }
 
-func RouteBasic(server Server, storage storage.Storage, silent bool) {
-	handler := BaseHandler{storage: storage, server: &server, silent: silent}
+func RouteBasic(server Server, storage storage.Storage) {
+	handler := BaseHandler{storage: storage, server: &server}
 	server.AddHandler("ECHO", handler.handleEcho)
 	server.AddHandler("SET", handler.handleSet)
 	server.AddHandler("GET", handler.handleGet)
@@ -32,74 +31,74 @@ func RouteBasic(server Server, storage storage.Storage, silent bool) {
 
 func (h BaseHandler) handleEcho(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) < 1 {
-		h.Send(c, newErr("Not enough arguments for the ECHO command"))
+		io.WriteString(c, sendErr("Not enough arguments for the ECHO command"))
 		return
 	}
 
 	for _, arg := range cmd.Arguments {
-		h.Send(c, string(parser.BulkStringData(arg).Marshal()))
+		io.WriteString(c, string(parser.BulkStringData(arg).Marshal()))
 	}
 }
 
 func (h BaseHandler) handleSet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 2 {
-		h.Send(c, newErr("SET command requirees exactly 2 arguments"))
+		io.WriteString(c, sendErr("SET command requirees exactly 2 arguments"))
 		return
 	}
 
 	optArgs, ok := cmd.Options["PX"]
 	if ok {
 		if len(optArgs) != 1 {
-			h.Send(c, newErr("PX parameter requires exactly 1 argument"))
+			io.WriteString(c, sendErr("PX parameter requires exactly 1 argument"))
 			return
 		}
 
 		exp, err := strconv.Atoi(optArgs[0])
 		if err != nil {
-			h.Send(c, newErr("PX parameter must be integer"))
+			io.WriteString(c, sendErr("PX parameter must be integer"))
 			return
 		}
 
 		err = h.storage.SetWithTimer(cmd.Arguments[0], cmd.Arguments[1], exp)
 		if err != nil {
-			h.Send(c, newErr(err.Error()))
+			io.WriteString(c, sendErr(err.Error()))
 			return
 		}
 	} else {
 		err := h.storage.Set(cmd.Arguments[0], cmd.Arguments[1])
 		if err != nil {
-			h.Send(c, newErr(err.Error()))
+			io.WriteString(c, sendErr(err.Error()))
 			return
 		}
 	}
 
-	h.Send(c, string(parser.StringData("OK").Marshal()))
+	io.WriteString(c, string(parser.StringData("OK").Marshal()))
 }
 
 func (h BaseHandler) handleGet(c net.Conn, cmd commands.Command) {
 	if len(cmd.Arguments) != 1 {
-		h.Send(c, newErr("GET command requires exactly 1 argument"))
+		io.WriteString(c, sendErr("GET command requires exactly 1 argument"))
 		return
 	}
 	val, err := h.storage.Get(cmd.Arguments[0])
 	if err != nil {
-		h.Send(c, string(parser.NullBulkStringData().Marshal()))
+		io.WriteString(c, string(parser.NullBulkStringData().Marshal()))
 		log.Println(err.Error())
 		return
 	}
 
-	h.Send(c, string(parser.StringData(val).Marshal()))
+	io.WriteString(c, string(parser.StringData(val).Marshal()))
 }
 
 func (h BaseHandler) handlePing(c net.Conn, cmd commands.Command) {
-	h.Send(c, string(parser.StringData("PONG").Marshal()))
+	io.WriteString(c, string(parser.StringData("PONG").Marshal()))
 }
 
 func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 	var info map[string]any
 	err := mapstructure.Decode(GetReplInfo(), &info)
 	if err != nil {
-		h.Send(c, newErr(err.Error()))
+		io.WriteString(c, sendErr(err.Error()))
 		return
 	}
 
@@ -111,13 +110,7 @@ func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 	str := b.String()[:len(b.String())-2]
 	resStr := string(parser.BulkStringData(str).Marshal())
 
-	h.Send(c, resStr)
-}
-
-func (h BaseHandler) Send(c net.Conn, data string) {
-	if !h.silent {
-		io.WriteString(c, data)
-	}
+	io.WriteString(c, resStr)
 }
 
 type MasterHandler struct {
@@ -158,7 +151,7 @@ func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 	serverInfo := GetReplInfo()
 	replica, err := h.mc.GetReplica(c)
 	if err != nil {
-		io.WriteString(c, newErr(err.Error()))
+		io.WriteString(c, sendErr(err.Error()))
 		return
 	}
 
@@ -167,7 +160,7 @@ func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 
 	rdb, err := base64.StdEncoding.DecodeString("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
 	if err != nil {
-		io.WriteString(c, newErr("Can't decode base64 RDB file"))
+		io.WriteString(c, sendErr("Can't decode base64 RDB file"))
 	}
 
 	io.WriteString(c, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
@@ -175,7 +168,7 @@ func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 	h.mc.SetReplica(replica)
 }
 
-func newErr(str string) string {
+func sendErr(str string) string {
 	errString := fmt.Sprintf("ERR %s", str)
 	return string(parser.ErrorData(errString).Marshal())
 }
