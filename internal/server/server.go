@@ -122,14 +122,11 @@ func (s *Server) route(c net.Conn, input string) {
 	p := parser.NewParser(input)
 	for !p.IsAtEnd() {
 		parsed, err := p.Parse()
-		if err != nil {
-			log.Println(err.Error())
-		}
 		if parsed == nil {
 			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
 			log.Println(msg)
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			continue
+			return
 		}
 
 		command, err := s.cmdParser.ParseCommand(parsed.Flat())

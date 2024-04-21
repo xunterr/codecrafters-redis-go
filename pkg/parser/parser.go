@@ -78,6 +78,9 @@ func (p *Parser) Parse() (*Data, error) {
 	switch typeHeader.dataType {
 	case Array:
 		value, err = p.parseArray(typeHeader.length)
+		if err != nil {
+			return nil, err
+		}
 		data.array = value.([]Data)
 	case BulkString, String, Error:
 		value, err = p.scanString(typeHeader.length)
@@ -130,7 +133,7 @@ func (p *Parser) scanString(length int) (string, error) {
 		}
 	}
 
-	if p.start+length > len(p.source)-1 {
+	if p.start+length > len(p.source) {
 		return "", errors.New("Provided length is larger than a source string")
 	}
 
