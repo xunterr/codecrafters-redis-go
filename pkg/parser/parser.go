@@ -122,8 +122,10 @@ func (p *Parser) parseArray(length int) ([]Data, error) {
 }
 
 func (p *Parser) scanString(length int) (string, error) {
+	p.start = p.current
 	if length == 0 {
 		for (p.peek() != '\r' && p.peekNext() != '\n') && !p.IsAtEnd() {
+			p.current++
 			length++
 		}
 	}
@@ -132,8 +134,8 @@ func (p *Parser) scanString(length int) (string, error) {
 		return "", errors.New("Provided length is larger than a source string")
 	}
 
-	literal := p.source[p.current : p.current+length]
-	p.current = p.current + length
+	literal := p.source[p.start : p.start+length]
+	p.current = p.start + length
 	return literal, nil
 }
 

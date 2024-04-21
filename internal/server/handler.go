@@ -20,6 +20,16 @@ type BaseHandler struct {
 	server  *Server
 }
 
+type MasterHandler struct {
+	server   Server
+	mc       *MasterContext
+	sessions map[string]Replica
+}
+
+type ReplicaHandler struct {
+	replicaCtx *ReplicaContext
+}
+
 func RouteBasic(server Server, storage storage.Storage) {
 	handler := BaseHandler{storage: storage, server: &server}
 	server.AddHandler("ECHO", handler.handleEcho)
@@ -113,12 +123,6 @@ func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, resStr)
 }
 
-type MasterHandler struct {
-	server   Server
-	mc       *MasterContext
-	sessions map[string]Replica
-}
-
 func RouteMaster(server Server, mc *MasterContext) {
 	handler := MasterHandler{server, mc, map[string]Replica{}}
 	server.AddHandler("REPLCONF", handler.handleReplconf)
@@ -166,6 +170,33 @@ func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
 	io.WriteString(c, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
 	replica.IsUp = true
 	h.mc.SetReplica(replica)
+}
+
+func RouteReplica(sv Server, replicaContext *ReplicaContext) {
+	log.Println("routing replica...")
+	replicaHandler := ReplicaHandler{
+		replicaCtx: replicaContext,
+	}
+	sv.AddHandler("OK", replicaHandler.HandleOK)
+	sv.AddHandler("PONG", replicaHandler.HandlePong)
+}
+
+func (h ReplicaHandler) HandlePong(c net.Conn, cmd commands.Command) {
+
+	if c != h.replicaCtx.masterConn {
+		io.WriteString(c, sendErr("Unexpected command"))
+		return
+	}
+	h.replicaCtx.OnPong()
+}
+
+func (h ReplicaHandler) HandleOK(c net.Conn, cmd commands.Command) {
+	if c != h.replicaCtx.masterConn {
+		io.WriteString(c, sendErr("Unexpected command"))
+		return
+	}
+
+	h.replicaCtx.OnOk()
 }
 
 func sendErr(str string) string {

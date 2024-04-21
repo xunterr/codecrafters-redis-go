@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/pkg/client"
+	"github.com/looplab/fsm"
 )
 
 type ReplInfo struct {
@@ -26,6 +28,21 @@ type Replica struct {
 	ServerAddr string
 	Capas      []string
 	IsUp       bool
+}
+
+const (
+	None         = "none"
+	Ping         = "ping"
+	ReplconfLP   = "replconfLP"
+	ReplconfCapa = "replconfCapa"
+	Psync        = "psync"
+	Done         = "done"
+)
+
+type ReplicaContext struct {
+	listeningPort int
+	masterConn    net.Conn
+	handshakeFsm  *fsm.FSM
 }
 
 type MasterContext struct {
@@ -115,7 +132,11 @@ func GetReplInfo() ReplInfo {
 	return replInfo
 }
 
-func RegisterReplica(sv *Server, host string, port string, listeningPort int) {
+func RegisterReplica(sv *Server, host string, port string, listeningPort int) *ReplicaContext {
+	rc := &ReplicaContext{
+		listeningPort: listeningPort,
+	}
+
 	replInfo = ReplInfo{
 		Role: Slave,
 	}
@@ -123,13 +144,55 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) {
 	c, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		log.Fatalf("Error connecting to the master: %s", err.Error())
-		return
+		return nil
 	}
+
+	rc.masterConn = c
+
+	fsm := fsm.NewFSM(
+		None,
+		fsm.Events{
+			{Name: "onStart", Src: []string{None}, Dst: Ping},
+			{Name: "onPong", Src: []string{Ping}, Dst: ReplconfLP},
+			{Name: "onOK", Src: []string{ReplconfLP}, Dst: ReplconfCapa},
+			{Name: "onOK", Src: []string{ReplconfCapa}, Dst: Psync},
+		},
+		fsm.Callbacks{
+			"enter_state": func(_ context.Context, e *fsm.Event) { rc.onReplHandshakeStateChange(e) },
+		},
+	)
+
+	rc.handshakeFsm = fsm
+
 	go sv.Serve(c)
-	pingMaster(c)
-	setListeningPort(c, listeningPort)
-	setCapabilities(c)
-	psync(c)
+
+	fsm.Event(context.Background(), "onStart")
+	return rc
+}
+
+func (rc ReplicaContext) onReplHandshakeStateChange(e *fsm.Event) {
+	switch e.Dst {
+	case Ping:
+		pingMaster(rc.masterConn)
+	case ReplconfLP:
+		setListeningPort(rc.masterConn, rc.listeningPort)
+	case ReplconfCapa:
+		setCapabilities(rc.masterConn)
+	}
+}
+
+func (rc ReplicaContext) OnOk() {
+	err := rc.handshakeFsm.Event(context.Background(), "onOK")
+	if err != nil {
+		log.Println("Unexpected command from master: PONG")
+	}
+}
+
+func (rc ReplicaContext) OnPong() {
+	err := rc.handshakeFsm.Event(context.Background(), "onPong")
+	if err != nil {
+		log.Println("Unexpected command from master: PONG")
+	}
 }
 
 func pingMaster(c net.Conn) {

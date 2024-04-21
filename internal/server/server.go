@@ -122,7 +122,6 @@ func (s *Server) route(c net.Conn, input string) {
 	p := parser.NewParser(input)
 	for !p.IsAtEnd() {
 		parsed, err := p.Parse()
-		log.Printf("%v", parsed)
 		if err != nil {
 			log.Println(err.Error())
 		}
