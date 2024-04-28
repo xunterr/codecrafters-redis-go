@@ -203,7 +203,7 @@ func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
 			[]parser.Data{
 				parser.BulkStringData("REPLCONF"),
 				parser.BulkStringData("ACK"),
-				parser.BulkStringData("0"),
+				parser.BulkStringData(strconv.Itoa(GetReplInfo().ReplOffset)),
 			},
 		).Marshal()))
 	}
