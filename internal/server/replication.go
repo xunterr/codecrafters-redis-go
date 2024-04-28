@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/pkg/client"
 	"github.com/looplab/fsm"
 )
@@ -65,10 +66,18 @@ func SetAsMaster(server *Server) *MasterContext {
 		make(map[string]Replica),
 	}
 	go mc.HealthCheck()
-	server.AddMiddleware(func(c net.Conn, req []byte) {
-		mc.Propagate(req)
-	}, []RequestType{Write})
 
+	server.SetCallChain(
+		NewNode(func(next *Node, request Request, rw ResponseWriter) error {
+			if request.Command.Type == commands.Write {
+				mc.Propagate(request.Raw)
+			}
+			next.Call(request, rw)
+			return nil
+		}).
+			SetNext(server.CallHandlers).
+			First(),
+	)
 	return &mc
 }
 
@@ -100,7 +109,7 @@ func (mc *MasterContext) MarkAsDown(addr string, msg string) {
 	mc.replicas[addr] = repl
 }
 
-func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) { //this is so silly :3 (i hate this)
+func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) {
 	repl, ok := mc.replicas[c.RemoteAddr().String()]
 	if !ok {
 		return Replica{}, errors.New("No such replica")
@@ -115,7 +124,6 @@ func (mc *MasterContext) SetReplica(replica Replica) {
 
 func (mc *MasterContext) Propagate(req []byte) {
 	log.Printf("Propagating to %d replicas", len(mc.replicas))
-	log.Printf("%v", mc.replicas)
 	for i, r := range mc.replicas {
 		if r.IsUp {
 			log.Printf("Propagating to %s", r.Conn.RemoteAddr())
@@ -161,8 +169,25 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			"enter_state": func(_ context.Context, e *fsm.Event) { rc.onReplHandshakeStateChange(e) },
 		},
 	)
-
 	rc.handshakeFsm = fsm
+
+	sv.SetCallChain(
+		NewNode(sv.CallHandlers).
+			SetNext(func(next *Node, request Request, rw ResponseWriter) error {
+				replInfo.ReplOffset += len(request.Raw)
+				next.Call(request, rw)
+				return nil
+			}).
+			First(),
+	)
+
+	sv.SetRwProvider(func(c net.Conn) ResponseWriter {
+		if c == rc.masterConn {
+			return SilentResponseWriter{}
+		} else {
+			return BasicResponseWriter{c}
+		}
+	})
 
 	go sv.Serve(c)
 

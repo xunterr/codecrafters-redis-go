@@ -45,27 +45,28 @@
     "args": [],
     "options": {
       "LISTENING-PORT": ["string"],
-      "CAPA": ["string"]
+      "CAPA": ["string"],
+      "GETACK": ["string"]
     },
-    "type": "info",
+    "type": "repl",
     "policy": "match"
   },
   "PSYNC": {
     "args": ["string", "string"],
     "options": {},
-    "type": "info",
+    "type": "repl",
     "policy": "match"
   },
   "REDIS": {
     "args": [],
     "options": {},
-    "type": "write",
+    "type": "repl",
     "policy": "startsWith"
   },
   "FULLRESYNC": {
     "args": [],
     "options": {},
-    "type": "write",
+    "type": "repl",
     "policy": "startsWith"
   },
   "PONG": {

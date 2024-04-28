@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"strconv"
 	"strings"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/storage"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
 	"github.com/mitchellh/mapstructure"
@@ -39,76 +37,76 @@ func RouteBasic(server Server, storage storage.Storage) {
 	server.AddHandler("INFO", handler.handleInfo)
 }
 
-func (h BaseHandler) handleEcho(c net.Conn, cmd commands.Command) {
-	if len(cmd.Arguments) < 1 {
-		io.WriteString(c, sendErr("Not enough arguments for the ECHO command"))
+func (h BaseHandler) handleEcho(req Request, rw ResponseWriter) {
+	if len(req.Command.Arguments) < 1 {
+		rw.Write(parser.ErrorData("ERR: Not enough arguments for the ECHO command"))
 		return
 	}
 
-	for _, arg := range cmd.Arguments {
-		io.WriteString(c, string(parser.BulkStringData(arg).Marshal()))
+	for _, arg := range req.Command.Arguments {
+		rw.Write(parser.BulkStringData(arg))
 	}
 }
 
-func (h BaseHandler) handleSet(c net.Conn, cmd commands.Command) {
-	if len(cmd.Arguments) != 2 {
-		io.WriteString(c, sendErr("SET command requirees exactly 2 arguments"))
+func (h BaseHandler) handleSet(req Request, rw ResponseWriter) {
+	if len(req.Command.Arguments) != 2 {
+		rw.Write(parser.ErrorData("ERR: SET command requirees exactly 2 arguments"))
 		return
 	}
 
-	optArgs, ok := cmd.Options["PX"]
+	optArgs, ok := req.Command.Options["PX"]
 	if ok {
 		if len(optArgs) != 1 {
-			io.WriteString(c, sendErr("PX parameter requires exactly 1 argument"))
+			rw.Write(parser.ErrorData("ERR: PX parameter requires exactly 1 argument"))
 			return
 		}
 
 		exp, err := strconv.Atoi(optArgs[0])
 		if err != nil {
-			io.WriteString(c, sendErr("PX parameter must be integer"))
+			rw.Write(parser.ErrorData("ERR: PX parameter must be integer"))
 			return
 		}
 
-		err = h.storage.SetWithTimer(cmd.Arguments[0], cmd.Arguments[1], exp)
+		err = h.storage.SetWithTimer(req.Command.Arguments[0], req.Command.Arguments[1], exp)
 		if err != nil {
-			io.WriteString(c, sendErr(err.Error()))
+			rw.Write(parser.ErrorData(err.Error()))
 			return
 		}
 	} else {
-		err := h.storage.Set(cmd.Arguments[0], cmd.Arguments[1])
+		err := h.storage.Set(req.Command.Arguments[0], req.Command.Arguments[1])
 		if err != nil {
-			io.WriteString(c, sendErr(err.Error()))
+			rw.Write(parser.ErrorData(err.Error()))
 			return
 		}
 	}
 
-	io.WriteString(c, string(parser.StringData("OK").Marshal()))
+	rw.Write(parser.StringData("OK"))
 }
 
-func (h BaseHandler) handleGet(c net.Conn, cmd commands.Command) {
-	if len(cmd.Arguments) != 1 {
-		io.WriteString(c, sendErr("GET command requires exactly 1 argument"))
+func (h BaseHandler) handleGet(req Request, rw ResponseWriter) {
+	if len(req.Command.Arguments) != 1 {
+		rw.Write(parser.ErrorData("GET command requires exactly 1 argument"))
 		return
 	}
-	val, err := h.storage.Get(cmd.Arguments[0])
+	val, err := h.storage.Get(req.Command.Arguments[0])
 	if err != nil {
-		io.WriteString(c, string(parser.NullBulkStringData().Marshal()))
+		rw.Write(parser.NullBulkStringData())
 		log.Println(err.Error())
 		return
 	}
 
-	io.WriteString(c, string(parser.StringData(val).Marshal()))
+	rw.Write(parser.StringData(val))
 }
 
-func (h BaseHandler) handlePing(c net.Conn, cmd commands.Command) {
-	io.WriteString(c, string(parser.StringData("PONG").Marshal()))
+func (h BaseHandler) handlePing(req Request, rw ResponseWriter) {
+	rw.Write(parser.StringData("PONG"))
 }
 
-func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
+func (h BaseHandler) handleInfo(req Request, rw ResponseWriter) {
 	var info map[string]any
 	err := mapstructure.Decode(GetReplInfo(), &info)
 	if err != nil {
-		io.WriteString(c, sendErr(err.Error()))
+		rw.Write(parser.ErrorData(err.Error()))
 		return
 	}
 
@@ -120,7 +118,7 @@ func (h BaseHandler) handleInfo(c net.Conn, cmd commands.Command) {
 	str := b.String()[:len(b.String())-2]
 	resStr := string(parser.BulkStringData(str).Marshal())
 
-	io.WriteString(c, resStr)
+	io.WriteString(req.Conn, resStr)
 }
 
 func RouteMaster(server Server, mc *MasterContext) {
@@ -129,78 +127,84 @@ func RouteMaster(server Server, mc *MasterContext) {
 	server.AddHandler("PSYNC", handler.handlePsync)
 }
 
-func (h MasterHandler) handleReplconf(c net.Conn, cmd commands.Command) {
-	repl, err := h.mc.GetReplica(c)
+func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
+	repl, err := h.mc.GetReplica(req.Conn)
 	if err != nil {
 		repl = Replica{
-			Conn: c,
+			Conn: req.Conn,
 			IsUp: false,
 		}
 		h.mc.SetReplica(repl)
 	}
 
-	if lp, ok := cmd.Options["LISTENING-PORT"]; ok {
-		host := strings.Split(c.RemoteAddr().String(), ":")[0]
+	if lp, ok := req.Command.Options["LISTENING-PORT"]; ok {
+		host := strings.Split(req.Conn.RemoteAddr().String(), ":")[0]
 		addr := fmt.Sprintf("%s:%s", host, lp[0])
 		repl.ServerAddr = addr
-	} else if capa, ok := cmd.Options["CAPA"]; ok {
+	} else if capa, ok := req.Command.Options["CAPA"]; ok {
 		repl.Capas = capa
 	}
 
 	h.mc.SetReplica(repl)
-	io.WriteString(c, string(parser.StringData("OK").Marshal()))
+	rw.Write(parser.StringData("OK"))
 }
 
-func (h MasterHandler) handlePsync(c net.Conn, cmd commands.Command) {
+func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 	serverInfo := GetReplInfo()
-	replica, err := h.mc.GetReplica(c)
+	replica, err := h.mc.GetReplica(req.Conn)
 	if err != nil {
-		io.WriteString(c, sendErr(err.Error()))
+		rw.Write(parser.ErrorData(err.Error()))
 		return
 	}
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
-	io.WriteString(c, string(parser.StringData(fullresync).Marshal()))
+	rw.Write(parser.StringData(fullresync))
 
 	rdb, err := base64.StdEncoding.DecodeString("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
 	if err != nil {
-		io.WriteString(c, sendErr("Can't decode base64 RDB file"))
+		rw.Write(parser.ErrorData("ERR: Can't decode RDB file"))
+		return
 	}
 
-	io.WriteString(c, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
+	io.WriteString(req.Conn, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
 	replica.IsUp = true
 	h.mc.SetReplica(replica)
 }
 
 func RouteReplica(sv Server, replicaContext *ReplicaContext) {
-	log.Println("routing replica...")
 	replicaHandler := ReplicaHandler{
 		replicaCtx: replicaContext,
 	}
 	sv.AddHandler("OK", replicaHandler.HandleOK)
 	sv.AddHandler("PONG", replicaHandler.HandlePong)
+	sv.AddHandler("REPLCONF", replicaHandler.HandleReplconf)
 }
 
-func (h ReplicaHandler) HandlePong(c net.Conn, cmd commands.Command) {
-
-	if c != h.replicaCtx.masterConn {
-		io.WriteString(c, sendErr("Unexpected command"))
+func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
+	if req.Conn != h.replicaCtx.masterConn {
+		rw.Write(parser.ErrorData("ERR: Unexpected command"))
 		return
 	}
 	h.replicaCtx.OnPong()
 }
 
-func (h ReplicaHandler) HandleOK(c net.Conn, cmd commands.Command) {
-	println("OK")
-	if c != h.replicaCtx.masterConn {
-		io.WriteString(c, sendErr("Unexpected command"))
+func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
+	if req.Conn != h.replicaCtx.masterConn {
+		rw.Write(parser.ErrorData("ERR: Unexpected command"))
 		return
 	}
 
 	h.replicaCtx.OnOk()
 }
 
-func sendErr(str string) string {
-	errString := fmt.Sprintf("ERR %s", str)
-	return string(parser.ErrorData(errString).Marshal())
+func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
+	if _, ok := req.Command.Options["GETACK"]; ok {
+		rw.Write(parser.ArrayData(
+			[]parser.Data{
+				parser.BulkStringData("REPLCONF"),
+				parser.BulkStringData("ACK"),
+				parser.BulkStringData("0"),
+			},
+		))
+	}
 }

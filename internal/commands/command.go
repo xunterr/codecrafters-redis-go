@@ -29,9 +29,10 @@ type CommandType string
 type CommandPolicy string
 
 const (
-	WriteCommand CommandType = "write"
-	ReadCommand  CommandType = "read"
-	InfoCommand  CommandType = "info"
+	Write CommandType = "write"
+	Read  CommandType = "read"
+	Info  CommandType = "info"
+	Repl  CommandType = "repl"
 )
 
 const (

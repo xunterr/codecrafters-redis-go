@@ -132,7 +132,6 @@ func (p *Parser) scanString(length int) (string, error) {
 			length++
 		}
 	}
-
 	if p.start+length > len(p.source) {
 		return "", errors.New("Provided length is larger than a source string")
 	}
