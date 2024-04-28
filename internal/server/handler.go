@@ -177,6 +177,7 @@ func RouteReplica(sv Server, replicaContext *ReplicaContext) {
 	}
 	sv.AddHandler("OK", replicaHandler.HandleOK)
 	sv.AddHandler("PONG", replicaHandler.HandlePong)
+	sv.AddHandler("REPLCONF", replicaHandler.HandleReplconf)
 }
 
 func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
@@ -196,7 +197,14 @@ func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
 	h.replicaCtx.OnOk()
 }
 
-func sendErr(str string) string {
-	errString := fmt.Sprintf("ERR %s", str)
-	return string(parser.ErrorData(errString).Marshal())
+func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
+	if _, ok := req.Command.Options["GETACK"]; ok {
+		rw.Write(parser.ArrayData(
+			[]parser.Data{
+				parser.BulkStringData("REPLCONF"),
+				parser.BulkStringData("ACK"),
+				parser.BulkStringData("0"),
+			},
+		))
+	}
 }
