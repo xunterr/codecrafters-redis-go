@@ -199,12 +199,12 @@ func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
 
 func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
 	if _, ok := req.Command.Options["GETACK"]; ok {
-		rw.Write(parser.ArrayData(
+		io.WriteString(req.Conn, string(parser.ArrayData( //this is special case, as said in the docs, so we are bypassing rw
 			[]parser.Data{
 				parser.BulkStringData("REPLCONF"),
 				parser.BulkStringData("ACK"),
 				parser.BulkStringData("0"),
 			},
-		))
+		).Marshal()))
 	}
 }
