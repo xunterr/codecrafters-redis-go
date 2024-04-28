@@ -12,100 +12,48 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
 )
 
-type HandlerFunc func(req Request, rw ResponseWriter)
-type NodeFunc func(next *Node, request Request, rw ResponseWriter) error
+type HandlerFunc func(c net.Conn, cmd commands.Command)
+type MiddlewareFunc func(c net.Conn, req []byte)
 
-type Node struct {
-	Handle NodeFunc
-	isEnd  bool
-	next   *Node
-	prev   *Node
+type middleware struct {
+	middlewareFunc MiddlewareFunc
+	requestTypes   map[RequestType]struct{}
 }
 
 type Server struct {
-	handlers   map[string]HandlerFunc
-	callChain  *Node
-	cmdParser  commands.CommandParser
-	rwProvider func(c net.Conn) ResponseWriter
+	handlers    map[string]HandlerFunc
+	middlewares []middleware
+	cmdParser   commands.CommandParser
 }
 
-type Request struct {
-	Conn    net.Conn
-	Raw     []byte
-	Command *commands.Command
-}
+type RequestType int
 
-type ResponseWriter interface {
-	Write(data parser.Data) error
-}
+const (
+	Any RequestType = iota
+	Write
+	Read
+	Info
+)
 
-type BasicResponseWriter struct {
-	conn net.Conn
-}
-
-func (rw BasicResponseWriter) Write(data parser.Data) error {
-	_, err := io.WriteString(rw.conn, string(data.Marshal()))
-	return err
-}
-
-type SilentResponseWriter struct {
-}
-
-func (rw SilentResponseWriter) Write(data parser.Data) error {
-	return nil
-}
-
-func NewNode(nodeFunc NodeFunc) *Node {
-	return &Node{
-		Handle: nodeFunc,
-		next:   &Node{isEnd: true},
+func GetRequestType(cmd commands.Command) RequestType {
+	switch cmd.Type {
+	case commands.ReadCommand:
+		return Read
+	case commands.InfoCommand:
+		return Info
+	case commands.WriteCommand:
+		return Write
+	default:
+		return Any
 	}
-}
-
-func (n *Node) SetNext(nodeFunc NodeFunc) *Node {
-	n.next = NewNode(nodeFunc)
-	n.next.prev = n
-	return n.next
-}
-
-func (n *Node) First() *Node {
-	current := n
-	for current.prev != nil {
-		current = current.prev
-	}
-	return current
-}
-
-func (n *Node) Last() *Node {
-	current := n
-	for current.next != nil {
-		current = current.next
-	}
-	return current
-}
-
-func (n Node) Call(req Request, rw ResponseWriter) error {
-	if n.isEnd {
-		return nil
-	}
-	return n.Handle(n.next, req, rw)
 }
 
 func NewServer(cmdParser commands.CommandParser) Server {
-	sv := Server{
-		handlers:  map[string]HandlerFunc{},
-		cmdParser: cmdParser,
-		rwProvider: func(c net.Conn) ResponseWriter {
-			return BasicResponseWriter{conn: c}
-		},
+	return Server{
+		handlers:    map[string]HandlerFunc{},
+		middlewares: []middleware{}, // executes after request received and before it gets routed
+		cmdParser:   cmdParser,
 	}
-
-	sv.SetCallChain(NewNode(sv.CallHandlers))
-	return sv
-}
-
-func (s *Server) SetCallChain(first *Node) {
-	s.callChain = first
 }
 
 func (s Server) Listen(addr string) {
@@ -135,23 +83,28 @@ func (s *Server) AddHandler(name string, handler HandlerFunc) {
 	s.handlers[name] = handler
 }
 
-func (s *Server) SetRwProvider(rwProvider func(c net.Conn) ResponseWriter) {
-	s.rwProvider = rwProvider
+func (s *Server) AddMiddleware(mf MiddlewareFunc, rqTypes []RequestType) {
+	rqTypesMap := make(map[RequestType]struct{})
+	for _, e := range rqTypes {
+		rqTypesMap[e] = struct{}{}
+	}
+	s.middlewares = append(s.middlewares, middleware{mf, rqTypesMap})
 }
 
-func (s Server) CallHandlers(next *Node, req Request, rw ResponseWriter) error {
-	handler, ok := s.handlers[req.Command.Name]
-	if ok {
-		handler(req, rw)
-		next.Call(req, rw)
+func (s Server) CallMiddlewares(c net.Conn, req []byte, rqType RequestType) { //add some datastruct to represent current state
+	for _, mw := range s.middlewares {
+		_, isAnyType := mw.requestTypes[rqType]
+		if _, ok := mw.requestTypes[rqType]; ok || isAnyType {
+			mw.middlewareFunc(c, req)
+		}
 	}
-	return nil
 }
 
 func (s Server) Serve(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)
+		log.Printf("Received data from %s", c.RemoteAddr().String())
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading request: %s", err.Error())
@@ -169,11 +122,15 @@ func (s *Server) route(c net.Conn, input string) {
 	p := parser.NewParser(input)
 	for !p.IsAtEnd() {
 		parsed, err := p.Parse()
+		log.Printf("%v", parsed)
+		if err != nil {
+			log.Println(err.Error())
+		}
 		if parsed == nil {
 			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
 			log.Println(msg)
 			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			return
+			continue
 		}
 
 		command, err := s.cmdParser.ParseCommand(parsed.Flat())
@@ -183,12 +140,11 @@ func (s *Server) route(c net.Conn, input string) {
 			continue
 		}
 
-		req := Request{
-			Conn:    c,
-			Raw:     parsed.Marshal(),
-			Command: &command,
+		s.CallMiddlewares(c, parsed.Marshal(), GetRequestType(command))
+
+		handler, ok := s.handlers[command.Name]
+		if ok {
+			handler(c, command)
 		}
-		rw := s.rwProvider(c)
-		s.callChain.Call(req, rw)
 	}
 }

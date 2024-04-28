@@ -45,7 +45,6 @@ func TestToMap(t *testing.T) {
 			},
 		},
 	}
-
 	p, err := data.ToMap()
 	if err != nil {
 		t.Error(err.Error())
