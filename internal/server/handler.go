@@ -17,7 +17,6 @@ type BaseHandler struct {
 	storage storage.Storage
 	server  *Server
 }
-
 type MasterHandler struct {
 	server   Server
 	mc       *MasterContext
@@ -178,6 +177,7 @@ func RouteReplica(sv Server, replicaContext *ReplicaContext) {
 	sv.AddHandler("OK", replicaHandler.HandleOK)
 	sv.AddHandler("PONG", replicaHandler.HandlePong)
 	sv.AddHandler("REPLCONF", replicaHandler.HandleReplconf)
+	sv.AddHandler("FULLRESYNC", replicaHandler.HandleFsync)
 }
 
 func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
@@ -185,7 +185,7 @@ func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
 		rw.Write(parser.ErrorData("ERR: Unexpected command"))
 		return
 	}
-	h.replicaCtx.OnPong()
+	h.replicaCtx.Event(OnPong)
 }
 
 func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
@@ -194,7 +194,7 @@ func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
 		return
 	}
 
-	h.replicaCtx.OnOk()
+	h.replicaCtx.Event(OnOk)
 }
 
 func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
@@ -207,4 +207,9 @@ func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
 			},
 		).Marshal()))
 	}
+}
+
+func (h ReplicaHandler) HandleFsync(req Request, rw ResponseWriter) {
+	UpdateReplInfo("", 0)
+	h.replicaCtx.Event(OnFsync)
 }

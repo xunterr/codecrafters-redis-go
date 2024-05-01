@@ -66,6 +66,7 @@ func (n *Node) SetNext(nodeFunc NodeFunc) *Node {
 	n.next = NewNode(nodeFunc)
 	n.next.prev = n
 	return n.next
+
 }
 
 func (n *Node) First() *Node {
@@ -82,6 +83,15 @@ func (n *Node) Last() *Node {
 		current = current.next
 	}
 	return current
+}
+
+func (n *Node) GetArray() (arr []*Node) {
+	node := n.First()
+	for node != nil {
+		arr = append(arr, node)
+		node = node.next
+	}
+	return
 }
 
 func (n Node) Call(req Request, rw ResponseWriter) error {
@@ -108,7 +118,7 @@ func (s *Server) SetCallChain(first *Node) {
 	s.callChain = first
 }
 
-func (s Server) Listen(addr string) {
+func (s *Server) Listen(addr string) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Printf("Failed to bind to %s", addr)
@@ -148,7 +158,7 @@ func (s Server) CallHandlers(next *Node, req Request, rw ResponseWriter) error {
 	return nil
 }
 
-func (s Server) Serve(c net.Conn) {
+func (s *Server) Serve(c net.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		ln, err := c.Read(buf)

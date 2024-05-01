@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/server"
@@ -25,7 +24,6 @@ func init() {
 
 func main() {
 	flag.Parse()
-	var wg sync.WaitGroup
 	path, err := filepath.Abs("cmds.json")
 	if err != nil {
 		log.Println(err.Error())
@@ -44,12 +42,6 @@ func main() {
 	storage := storage.NewStorage()
 	server.RouteBasic(sv, *storage)
 
-	wg.Add(1)
-	go func() {
-		sv.Listen(fmt.Sprintf(":%d", PORT))
-		wg.Done()
-	}()
-
 	if MASTER_HOST != "" && len(flag.Args()) > 0 {
 		replicaCtx := server.RegisterReplica(&sv, MASTER_HOST, flag.Arg(0), PORT)
 		server.RouteReplica(sv, replicaCtx)
@@ -57,5 +49,5 @@ func main() {
 		mc := server.SetAsMaster(&sv)
 		server.RouteMaster(sv, mc)
 	}
-	wg.Wait()
+	sv.Listen(fmt.Sprintf(":%d", PORT))
 }

@@ -67,7 +67,7 @@ func NewCommandParser(cmdTable map[string]CommandInfo) CommandParser {
 func (p CommandParser) ParseCommand(req []string) (Command, error) {
 	commandName := strings.ToUpper(req[0])
 
-	cmdInfo, err := p.getCommandInfo(commandName)
+	commandName, cmdInfo, err := p.getCommandInfo(commandName)
 
 	if err != nil {
 		return Command{}, err
@@ -85,17 +85,17 @@ func (p CommandParser) ParseCommand(req []string) (Command, error) {
 	return Command{commandName, options, args, cmdInfo.Type}, nil
 }
 
-func (p CommandParser) getCommandInfo(cmdName string) (CommandInfo, error) {
+func (p CommandParser) getCommandInfo(cmdName string) (string, CommandInfo, error) {
 	k, v, err := p.cmdTable.GetBestMatch(cmdName)
 	if err != nil {
-		return CommandInfo{}, errors.New(fmt.Sprintf("Unknown command: %s", cmdName))
+		return "", CommandInfo{}, errors.New(fmt.Sprintf("Unknown command: %s", cmdName))
 	}
 
 	if k != cmdName && v.Policy != StartsWith {
-		return CommandInfo{}, errors.New(fmt.Sprintf("Can't find matching command for %s", cmdName))
+		return "", CommandInfo{}, errors.New(fmt.Sprintf("Can't find matching command for %s", cmdName))
 	}
 
-	return *v, nil
+	return k, *v, nil
 }
 
 func (p CommandParser) parseOptions(input []string, cmdInfo CommandInfo) (map[string][]string, error) {
