@@ -40,7 +40,15 @@ const (
 	Done         = "done"
 )
 
+const (
+	OnStart = "onStart"
+	OnPong  = "onPong"
+	OnOk    = "onOk"
+	OnFsync = "onFsync"
+)
+
 type ReplicaContext struct {
+	server        *Server
 	listeningPort int
 	masterConn    net.Conn
 	handshakeFsm  *fsm.FSM
@@ -140,8 +148,14 @@ func GetReplInfo() ReplInfo {
 	return replInfo
 }
 
+func UpdateReplInfo(replId string, replOffset int) {
+	replInfo.ReplId = replId
+	replInfo.ReplOffset = replOffset
+}
+
 func RegisterReplica(sv *Server, host string, port string, listeningPort int) *ReplicaContext {
 	rc := &ReplicaContext{
+		server:        sv,
 		listeningPort: listeningPort,
 	}
 
@@ -154,32 +168,35 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 		log.Fatalf("Error connecting to the master: %s", err.Error())
 		return nil
 	}
-
 	rc.masterConn = c
 
 	fsm := fsm.NewFSM(
 		None,
 		fsm.Events{
-			{Name: "onStart", Src: []string{None}, Dst: Ping},
-			{Name: "onPong", Src: []string{Ping}, Dst: ReplconfLP},
-			{Name: "onOK", Src: []string{ReplconfLP}, Dst: ReplconfCapa},
-			{Name: "onOK", Src: []string{ReplconfCapa}, Dst: Psync},
+			{Name: OnStart, Src: []string{None}, Dst: Ping},
+			{Name: OnPong, Src: []string{Ping}, Dst: ReplconfLP},
+			{Name: OnOk, Src: []string{ReplconfLP}, Dst: ReplconfCapa},
+			{Name: OnOk, Src: []string{ReplconfCapa}, Dst: Psync},
+			{Name: OnFsync, Src: []string{Psync}, Dst: Done},
 		},
 		fsm.Callbacks{
-			"enter_state": func(_ context.Context, e *fsm.Event) { rc.onReplHandshakeStateChange(e) },
-		},
-	)
+			Ping:         func(_ context.Context, e *fsm.Event) { pingMaster(rc.masterConn) },
+			ReplconfLP:   func(_ context.Context, e *fsm.Event) { setListeningPort(rc.masterConn, listeningPort) },
+			ReplconfCapa: func(_ context.Context, e *fsm.Event) { setCapabilities(rc.masterConn) },
+			Psync:        func(_ context.Context, e *fsm.Event) { psync(rc.masterConn) },
+			Done: func(ctx context.Context, e *fsm.Event) {
+				sv.SetCallChain(
+					NewNode(sv.CallHandlers).
+						SetNext(func(next *Node, request Request, rw ResponseWriter) error {
+							replInfo.ReplOffset += len(request.Raw)
+							next.Call(request, rw)
+							return nil
+						}).
+						First(),
+				)
+			},
+		})
 	rc.handshakeFsm = fsm
-
-	sv.SetCallChain(
-		NewNode(sv.CallHandlers).
-			SetNext(func(next *Node, request Request, rw ResponseWriter) error {
-				replInfo.ReplOffset += len(request.Raw)
-				next.Call(request, rw)
-				return nil
-			}).
-			First(),
-	)
 
 	sv.SetRwProvider(func(c net.Conn) ResponseWriter {
 		if c == rc.masterConn {
@@ -188,38 +205,17 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			return BasicResponseWriter{c}
 		}
 	})
-
 	go sv.Serve(c)
 
-	fsm.Event(context.Background(), "onStart")
+	fsm.Event(context.Background(), OnStart)
 	return rc
 }
 
-func (rc ReplicaContext) onReplHandshakeStateChange(e *fsm.Event) {
-	switch e.Dst {
-	case Ping:
-		pingMaster(rc.masterConn)
-	case ReplconfLP:
-		setListeningPort(rc.masterConn, rc.listeningPort)
-	case ReplconfCapa:
-		setCapabilities(rc.masterConn)
-	case Psync:
-		psync(rc.masterConn)
-	}
+func (rc ReplicaContext) onHandshakeEnd(server *Server) {
 }
 
-func (rc ReplicaContext) OnOk() {
-	err := rc.handshakeFsm.Event(context.Background(), "onOK")
-	if err != nil {
-		log.Println("Unexpected command from master")
-	}
-}
-
-func (rc ReplicaContext) OnPong() {
-	err := rc.handshakeFsm.Event(context.Background(), "onPong")
-	if err != nil {
-		log.Println("Unexpected command from master: PONG")
-	}
+func (rc ReplicaContext) Event(name string) error {
+	return rc.handshakeFsm.Event(context.Background(), name)
 }
 
 func pingMaster(c net.Conn) {

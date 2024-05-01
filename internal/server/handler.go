@@ -17,7 +17,6 @@ type BaseHandler struct {
 	storage storage.Storage
 	server  *Server
 }
-
 type MasterHandler struct {
 	server   Server
 	mc       *MasterContext
@@ -177,6 +176,8 @@ func RouteReplica(sv Server, replicaContext *ReplicaContext) {
 	}
 	sv.AddHandler("OK", replicaHandler.HandleOK)
 	sv.AddHandler("PONG", replicaHandler.HandlePong)
+	sv.AddHandler("REPLCONF", replicaHandler.HandleReplconf)
+	sv.AddHandler("FULLRESYNC", replicaHandler.HandleFsync)
 }
 
 func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
@@ -184,7 +185,7 @@ func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
 		rw.Write(parser.ErrorData("ERR: Unexpected command"))
 		return
 	}
-	h.replicaCtx.OnPong()
+	h.replicaCtx.Event(OnPong)
 }
 
 func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
@@ -193,10 +194,22 @@ func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
 		return
 	}
 
-	h.replicaCtx.OnOk()
+	h.replicaCtx.Event(OnOk)
 }
 
-func sendErr(str string) string {
-	errString := fmt.Sprintf("ERR %s", str)
-	return string(parser.ErrorData(errString).Marshal())
+func (h ReplicaHandler) HandleReplconf(req Request, rw ResponseWriter) {
+	if _, ok := req.Command.Options["GETACK"]; ok {
+		io.WriteString(req.Conn, string(parser.ArrayData( //this is special case, as said in the docs, so we are bypassing rw
+			[]parser.Data{
+				parser.BulkStringData("REPLCONF"),
+				parser.BulkStringData("ACK"),
+				parser.BulkStringData(strconv.Itoa(GetReplInfo().ReplOffset)),
+			},
+		).Marshal()))
+	}
+}
+
+func (h ReplicaHandler) HandleFsync(req Request, rw ResponseWriter) {
+	UpdateReplInfo("", 0)
+	h.replicaCtx.Event(OnFsync)
 }
