@@ -205,7 +205,9 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			return BasicResponseWriter{c}
 		}
 	})
-	go sv.Serve(c)
+	go func(sv *Server, c net.Conn) {
+		sv.Serve(c)
+	}(sv, c)
 
 	fsm.Event(context.Background(), OnStart)
 	return rc
