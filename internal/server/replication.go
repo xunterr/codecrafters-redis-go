@@ -188,6 +188,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 				sv.SetCallChain(
 					NewNode(sv.CallHandlers).
 						SetNext(func(next *Node, request Request, rw ResponseWriter) error {
+							println("incrementing")
 							replInfo.ReplOffset += len(request.Raw)
 							next.Call(request, rw)
 							return nil

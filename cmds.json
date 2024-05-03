@@ -46,7 +46,8 @@
     "options": {
       "LISTENING-PORT": ["string"],
       "CAPA": ["string"],
-      "GETACK": ["string"]
+      "GETACK": ["string"],
+      "ACK": ["string"]
     },
     "type": "repl",
     "policy": "match"

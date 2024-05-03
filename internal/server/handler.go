@@ -142,6 +142,8 @@ func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
 		repl.ServerAddr = addr
 	} else if capa, ok := req.Command.Options["CAPA"]; ok {
 		repl.Capas = capa
+	} else {
+		return
 	}
 
 	h.mc.SetReplica(repl)
