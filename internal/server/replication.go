@@ -76,11 +76,11 @@ func SetAsMaster(server *Server) *MasterContext {
 	go mc.HealthCheck()
 
 	server.SetCallChain(
-		NewNode(func(next *Node, request Request, rw ResponseWriter) error {
+		NewNode(func(current *Node, request Request, rw ResponseWriter) error {
 			if request.Command.Type == commands.Write {
 				mc.Propagate(request.Raw)
 			}
-			next.Call(request, rw)
+			current.Next(request, rw)
 			return nil
 		}).
 			SetNext(server.CallHandlers).
@@ -187,10 +187,9 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			Done: func(ctx context.Context, e *fsm.Event) {
 				sv.SetCallChain(
 					NewNode(sv.CallHandlers).
-						SetNext(func(next *Node, request Request, rw ResponseWriter) error {
-							println("incrementing")
+						SetNext(func(current *Node, request Request, rw ResponseWriter) error {
 							replInfo.ReplOffset += len(request.Raw)
-							next.Call(request, rw)
+							current.Next(request, rw)
 							return nil
 						}).
 						First(),
@@ -203,7 +202,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 		if c == rc.masterConn {
 			return SilentResponseWriter{}
 		} else {
-			return BasicResponseWriter{c}
+			return NewBasicResponseWriter(c)
 		}
 	})
 	go func(sv *Server, c net.Conn) {

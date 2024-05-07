@@ -13,10 +13,10 @@ import (
 )
 
 type HandlerFunc func(req Request, rw ResponseWriter)
-type NodeFunc func(next *Node, request Request, rw ResponseWriter) error
+type NodeFunc func(current *Node, request Request, rw ResponseWriter) error
 
 type Node struct {
-	Handle NodeFunc
+	handle NodeFunc
 	isEnd  bool
 	next   *Node
 	prev   *Node
@@ -36,29 +36,41 @@ type Request struct {
 }
 
 type ResponseWriter interface {
-	Write(data parser.Data) error
+	Write(data parser.Data)
+	Release() error
 }
 
 type BasicResponseWriter struct {
 	conn net.Conn
+	buff []byte
 }
 
-func (rw BasicResponseWriter) Write(data parser.Data) error {
-	_, err := io.WriteString(rw.conn, string(data.Marshal()))
+func NewBasicResponseWriter(c net.Conn) *BasicResponseWriter {
+	return &BasicResponseWriter{conn: c}
+}
+
+func (rw *BasicResponseWriter) Write(data parser.Data) {
+	rw.buff = append(rw.buff, data.Marshal()...)
+}
+
+func (rw BasicResponseWriter) Release() error {
+	_, err := io.WriteString(rw.conn, string(rw.buff))
 	return err
 }
 
 type SilentResponseWriter struct {
 }
 
-func (rw SilentResponseWriter) Write(data parser.Data) error {
+func (rw SilentResponseWriter) Write(data parser.Data) {
+}
+
+func (rw SilentResponseWriter) Release() error {
 	return nil
 }
 
 func NewNode(nodeFunc NodeFunc) *Node {
 	return &Node{
-		Handle: nodeFunc,
-		next:   &Node{isEnd: true},
+		handle: nodeFunc,
 	}
 }
 
@@ -94,11 +106,16 @@ func (n *Node) GetArray() (arr []*Node) {
 	return
 }
 
-func (n Node) Call(req Request, rw ResponseWriter) error {
-	if n.isEnd {
+func (n *Node) Call(req Request, rw ResponseWriter) error {
+	return n.handle(n, req, rw)
+}
+
+func (n *Node) Next(req Request, rw ResponseWriter) error {
+	if n.next == nil {
 		return nil
 	}
-	return n.Handle(n.next, req, rw)
+
+	return n.next.Call(req, rw)
 }
 
 func NewServer(cmdParser commands.CommandParser) Server {
@@ -106,7 +123,7 @@ func NewServer(cmdParser commands.CommandParser) Server {
 		handlers:  map[string]HandlerFunc{},
 		cmdParser: cmdParser,
 		rwProvider: func(c net.Conn) ResponseWriter {
-			return BasicResponseWriter{conn: c}
+			return NewBasicResponseWriter(c)
 		},
 	}
 
@@ -149,11 +166,11 @@ func (s *Server) SetRwProvider(rwProvider func(c net.Conn) ResponseWriter) {
 	s.rwProvider = rwProvider
 }
 
-func (s Server) CallHandlers(next *Node, req Request, rw ResponseWriter) error {
+func (s Server) CallHandlers(current *Node, req Request, rw ResponseWriter) error {
 	handler, ok := s.handlers[req.Command.Name]
 	if ok {
 		handler(req, rw)
-		next.Call(req, rw)
+		current.Next(req, rw)
 	}
 	return nil
 }
@@ -200,5 +217,6 @@ func (s *Server) route(c net.Conn, input string) {
 		}
 		rw := s.rwProvider(c)
 		s.callChain.Call(req, rw)
+		rw.Release()
 	}
 }
