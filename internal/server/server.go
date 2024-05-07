@@ -13,10 +13,10 @@ import (
 )
 
 type HandlerFunc func(req Request, rw ResponseWriter)
-type NodeFunc func(next *Node, request Request, rw ResponseWriter) error
+type NodeFunc func(current *Node, request Request, rw ResponseWriter) error
 
 type Node struct {
-	Handle NodeFunc
+	handle NodeFunc
 	isEnd  bool
 	next   *Node
 	prev   *Node
@@ -70,8 +70,7 @@ func (rw SilentResponseWriter) Release() error {
 
 func NewNode(nodeFunc NodeFunc) *Node {
 	return &Node{
-		Handle: nodeFunc,
-		next:   &Node{isEnd: true},
+		handle: nodeFunc,
 	}
 }
 
@@ -107,11 +106,16 @@ func (n *Node) GetArray() (arr []*Node) {
 	return
 }
 
-func (n Node) Call(req Request, rw ResponseWriter) error {
-	if n.isEnd {
+func (n *Node) Call(req Request, rw ResponseWriter) error {
+	return n.handle(n, req, rw)
+}
+
+func (n *Node) Next(req Request, rw ResponseWriter) error {
+	if n.next == nil {
 		return nil
 	}
-	return n.Handle(n.next, req, rw)
+
+	return n.next.Call(req, rw)
 }
 
 func NewServer(cmdParser commands.CommandParser) Server {
@@ -162,11 +166,11 @@ func (s *Server) SetRwProvider(rwProvider func(c net.Conn) ResponseWriter) {
 	s.rwProvider = rwProvider
 }
 
-func (s Server) CallHandlers(next *Node, req Request, rw ResponseWriter) error {
+func (s Server) CallHandlers(current *Node, req Request, rw ResponseWriter) error {
 	handler, ok := s.handlers[req.Command.Name]
 	if ok {
 		handler(req, rw)
-		next.Call(req, rw)
+		current.Next(req, rw)
 	}
 	return nil
 }
