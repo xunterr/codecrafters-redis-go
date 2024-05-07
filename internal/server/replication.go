@@ -202,7 +202,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 		if c == rc.masterConn {
 			return SilentResponseWriter{}
 		} else {
-			return BasicResponseWriter{c}
+			return NewBasicResponseWriter(c)
 		}
 	})
 	go sv.Serve(c)

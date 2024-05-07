@@ -36,22 +36,35 @@ type Request struct {
 }
 
 type ResponseWriter interface {
-	Write(data parser.Data) error
+	Write(data parser.Data)
+	Release() error
 }
 
 type BasicResponseWriter struct {
 	conn net.Conn
+	buff []byte
 }
 
-func (rw BasicResponseWriter) Write(data parser.Data) error {
-	_, err := io.WriteString(rw.conn, string(data.Marshal()))
+func NewBasicResponseWriter(c net.Conn) *BasicResponseWriter {
+	return &BasicResponseWriter{conn: c}
+}
+
+func (rw *BasicResponseWriter) Write(data parser.Data) {
+	rw.buff = append(rw.buff, data.Marshal()...)
+}
+
+func (rw BasicResponseWriter) Release() error {
+	_, err := io.WriteString(rw.conn, string(rw.buff))
 	return err
 }
 
 type SilentResponseWriter struct {
 }
 
-func (rw SilentResponseWriter) Write(data parser.Data) error {
+func (rw SilentResponseWriter) Write(data parser.Data) {
+}
+
+func (rw SilentResponseWriter) Release() error {
 	return nil
 }
 
@@ -106,7 +119,7 @@ func NewServer(cmdParser commands.CommandParser) Server {
 		handlers:  map[string]HandlerFunc{},
 		cmdParser: cmdParser,
 		rwProvider: func(c net.Conn) ResponseWriter {
-			return BasicResponseWriter{conn: c}
+			return NewBasicResponseWriter(c)
 		},
 	}
 
@@ -200,5 +213,6 @@ func (s *Server) route(c net.Conn, input string) {
 		}
 		rw := s.rwProvider(c)
 		s.callChain.Call(req, rw)
+		rw.Release()
 	}
 }
