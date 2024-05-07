@@ -188,7 +188,7 @@ func (s *Server) Serve(c net.Conn) {
 			break
 		}
 		log.Printf("[%s]: %q", c.RemoteAddr().String(), string(buf[:ln]))
-		go s.route(c, string(buf[:ln]))
+		s.route(c, string(buf[:ln]))
 	}
 }
 
