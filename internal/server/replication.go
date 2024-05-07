@@ -135,6 +135,9 @@ func (mc *MasterContext) Propagate(req []byte) {
 	for i, r := range mc.replicas {
 		if r.IsUp {
 			log.Printf("Propagating to %s", r.Conn.RemoteAddr())
+			client.Send(r.Conn, []string{"REPLCONF", "GETACK", "*"})
+			client.Send(r.Conn, []string{"PING"})
+			client.Send(r.Conn, []string{"REPLCONF", "GETACK", "*"})
 			_, err := r.Conn.Write(req)
 			if err != nil {
 				mc.MarkAsDown(i, "Error writing to the connection")
@@ -185,6 +188,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			ReplconfCapa: func(_ context.Context, e *fsm.Event) { setCapabilities(rc.masterConn) },
 			Psync:        func(_ context.Context, e *fsm.Event) { psync(rc.masterConn) },
 			Done: func(ctx context.Context, e *fsm.Event) {
+				log.Println("Handshake done; enabling replication offset tracking and waiting for the RDB file transfer message...")
 				sv.SetCallChain(
 					NewNode(sv.CallHandlers).
 						SetNext(func(current *Node, request Request, rw ResponseWriter) error {
