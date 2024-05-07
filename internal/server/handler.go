@@ -159,6 +159,7 @@ func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 	}
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
+	log.Println(len(fullresync))
 	rw.Write(parser.StringData(fullresync))
 
 	rdb, err := base64.StdEncoding.DecodeString("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
