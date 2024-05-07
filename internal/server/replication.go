@@ -135,9 +135,6 @@ func (mc *MasterContext) Propagate(req []byte) {
 	for i, r := range mc.replicas {
 		if r.IsUp {
 			log.Printf("Propagating to %s", r.Conn.RemoteAddr())
-			client.Send(r.Conn, []string{"REPLCONF", "GETACK", "*"})
-			client.Send(r.Conn, []string{"PING"})
-			client.Send(r.Conn, []string{"REPLCONF", "GETACK", "*"})
 			_, err := r.Conn.Write(req)
 			if err != nil {
 				mc.MarkAsDown(i, "Error writing to the connection")
