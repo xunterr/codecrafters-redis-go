@@ -54,6 +54,7 @@ func (rw *BasicResponseWriter) Write(data parser.Data) {
 }
 
 func (rw BasicResponseWriter) Release() error {
+	log.Printf("Sending %d bytes of data", len(rw.buff))
 	_, err := io.WriteString(rw.conn, string(rw.buff))
 	return err
 }
