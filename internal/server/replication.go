@@ -125,6 +125,13 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) {
 	return repl, nil
 }
 
+func (mc MasterContext) GetReplicas() (res []Replica) {
+	for _, v := range mc.replicas {
+		res = append(res, v)
+	}
+	return
+}
+
 func (mc *MasterContext) SetReplica(replica Replica) {
 	log.Println("Configuring replica..")
 	mc.replicas[replica.Conn.RemoteAddr().String()] = replica

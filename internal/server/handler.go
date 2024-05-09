@@ -172,7 +172,8 @@ func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 }
 
 func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
-	rw.Write(parser.IntegerData(0).Marshal())
+	replicas := h.mc.GetReplicas()
+	rw.Write(parser.IntegerData(len(replicas)).Marshal())
 }
 
 func RouteReplica(sv Server, replicaContext *ReplicaContext) {
