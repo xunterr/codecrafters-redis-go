@@ -38,74 +38,74 @@ func RouteBasic(server Server, storage storage.Storage) {
 
 func (h BaseHandler) handleEcho(req Request, rw ResponseWriter) {
 	if len(req.Command.Arguments) < 1 {
-		rw.Write(parser.ErrorData("ERR: Not enough arguments for the ECHO command"))
+		rw.Write(parser.ErrorData("ERR: Not enough arguments for the ECHO command").Marshal())
 		return
 	}
 
 	for _, arg := range req.Command.Arguments {
-		rw.Write(parser.BulkStringData(arg))
+		rw.Write(parser.BulkStringData(arg).Marshal())
 	}
 }
 
 func (h BaseHandler) handleSet(req Request, rw ResponseWriter) {
 	if len(req.Command.Arguments) != 2 {
-		rw.Write(parser.ErrorData("ERR: SET command requirees exactly 2 arguments"))
+		rw.Write(parser.ErrorData("ERR: SET command requirees exactly 2 arguments").Marshal())
 		return
 	}
 
 	optArgs, ok := req.Command.Options["PX"]
 	if ok {
 		if len(optArgs) != 1 {
-			rw.Write(parser.ErrorData("ERR: PX parameter requires exactly 1 argument"))
+			rw.Write(parser.ErrorData("ERR: PX parameter requires exactly 1 argument").Marshal())
 			return
 		}
 
 		exp, err := strconv.Atoi(optArgs[0])
 		if err != nil {
-			rw.Write(parser.ErrorData("ERR: PX parameter must be integer"))
+			rw.Write(parser.ErrorData("ERR: PX parameter must be integer").Marshal())
 			return
 		}
 
 		err = h.storage.SetWithTimer(req.Command.Arguments[0], req.Command.Arguments[1], exp)
 		if err != nil {
-			rw.Write(parser.ErrorData(err.Error()))
+			rw.Write(parser.ErrorData(err.Error()).Marshal())
 			return
 		}
 	} else {
 		err := h.storage.Set(req.Command.Arguments[0], req.Command.Arguments[1])
 		if err != nil {
-			rw.Write(parser.ErrorData(err.Error()))
+			rw.Write(parser.ErrorData(err.Error()).Marshal())
 			return
 		}
 	}
 
-	rw.Write(parser.StringData("OK"))
+	rw.Write(parser.StringData("OK").Marshal())
 }
 
 func (h BaseHandler) handleGet(req Request, rw ResponseWriter) {
 	if len(req.Command.Arguments) != 1 {
-		rw.Write(parser.ErrorData("GET command requires exactly 1 argument"))
+		rw.Write(parser.ErrorData("GET command requires exactly 1 argument").Marshal())
 		return
 	}
 	val, err := h.storage.Get(req.Command.Arguments[0])
 	if err != nil {
-		rw.Write(parser.NullBulkStringData())
+		rw.Write(parser.NullBulkStringData().Marshal())
 		log.Println(err.Error())
 		return
 	}
 
-	rw.Write(parser.StringData(val))
+	rw.Write(parser.StringData(val).Marshal())
 }
 
 func (h BaseHandler) handlePing(req Request, rw ResponseWriter) {
-	rw.Write(parser.StringData("PONG"))
+	rw.Write(parser.StringData("PONG").Marshal())
 }
 
 func (h BaseHandler) handleInfo(req Request, rw ResponseWriter) {
 	var info map[string]any
 	err := mapstructure.Decode(GetReplInfo(), &info)
 	if err != nil {
-		rw.Write(parser.ErrorData(err.Error()))
+		rw.Write(parser.ErrorData(err.Error()).Marshal())
 		return
 	}
 
@@ -145,27 +145,27 @@ func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
 	}
 
 	h.mc.SetReplica(repl)
-	rw.Write(parser.StringData("OK"))
+	rw.Write(parser.StringData("OK").Marshal())
 }
 
 func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 	serverInfo := GetReplInfo()
 	replica, err := h.mc.GetReplica(req.Conn)
 	if err != nil {
-		rw.Write(parser.ErrorData(err.Error()))
+		rw.Write(parser.ErrorData(err.Error()).Marshal())
 		return
 	}
 
 	fullresync := fmt.Sprintf("FULLRESYNC %s %d", serverInfo.ReplId, serverInfo.ReplOffset)
-	rw.Write(parser.StringData(fullresync))
+	rw.Write(parser.StringData(fullresync).Marshal())
 
 	rdb, err := base64.StdEncoding.DecodeString("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
 	if err != nil {
-		rw.Write(parser.ErrorData("ERR: Can't decode RDB file"))
+		rw.Write(parser.ErrorData("ERR: Can't decode RDB file").Marshal())
 		return
 	}
 
-	io.WriteString(req.Conn, fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb)))
+	rw.Write([]byte(fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb))))
 	replica.IsUp = true
 	h.mc.SetReplica(replica)
 }
@@ -182,7 +182,7 @@ func RouteReplica(sv Server, replicaContext *ReplicaContext) {
 
 func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
 	if req.Conn != h.replicaCtx.masterConn {
-		rw.Write(parser.ErrorData("ERR: Unexpected command"))
+		rw.Write(parser.ErrorData("ERR: Unexpected command").Marshal())
 		return
 	}
 	h.replicaCtx.Event(OnPong)
@@ -190,7 +190,7 @@ func (h ReplicaHandler) HandlePong(req Request, rw ResponseWriter) {
 
 func (h ReplicaHandler) HandleOK(req Request, rw ResponseWriter) {
 	if req.Conn != h.replicaCtx.masterConn {
-		rw.Write(parser.ErrorData("ERR: Unexpected command"))
+		rw.Write(parser.ErrorData("ERR: Unexpected command").Marshal())
 		return
 	}
 

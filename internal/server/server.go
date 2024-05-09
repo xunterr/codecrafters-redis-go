@@ -36,7 +36,7 @@ type Request struct {
 }
 
 type ResponseWriter interface {
-	Write(data parser.Data)
+	Write(data []byte)
 	Release() error
 }
 
@@ -49,8 +49,8 @@ func NewBasicResponseWriter(c net.Conn) *BasicResponseWriter {
 	return &BasicResponseWriter{conn: c}
 }
 
-func (rw *BasicResponseWriter) Write(data parser.Data) {
-	rw.buff = append(rw.buff, data.Marshal()...)
+func (rw *BasicResponseWriter) Write(data []byte) {
+	rw.buff = append(rw.buff, data...)
 }
 
 func (rw BasicResponseWriter) Release() error {
@@ -61,7 +61,7 @@ func (rw BasicResponseWriter) Release() error {
 type SilentResponseWriter struct {
 }
 
-func (rw SilentResponseWriter) Write(data parser.Data) {
+func (rw SilentResponseWriter) Write(data []byte) {
 }
 
 func (rw SilentResponseWriter) Release() error {
