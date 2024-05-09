@@ -51,6 +51,12 @@
     "type": "repl",
     "policy": "match"
   },
+  "WAIT": {
+    "args": ["string", "string"],
+    "options": {},
+    "type": "repl",
+    "policy": "match"
+  }
   "PSYNC": {
     "args": ["string", "string"],
     "options": {},

@@ -124,6 +124,7 @@ func RouteMaster(server Server, mc *MasterContext) {
 	handler := MasterHandler{server, mc, map[string]Replica{}}
 	server.AddHandler("REPLCONF", handler.handleReplconf)
 	server.AddHandler("PSYNC", handler.handlePsync)
+	server.AddHandler("WAIT", handler.handleWait)
 }
 
 func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
