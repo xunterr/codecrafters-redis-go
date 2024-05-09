@@ -56,7 +56,7 @@
     "options": {},
     "type": "repl",
     "policy": "match"
-  }
+  },
   "PSYNC": {
     "args": ["string", "string"],
     "options": {},
