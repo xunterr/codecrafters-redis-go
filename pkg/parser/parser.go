@@ -15,12 +15,14 @@ const (
 	String     DataType = '+'
 	Array      DataType = '*'
 	BulkString DataType = '$'
+	Integer    DataType = ':'
 	Error      DataType = '-'
 )
 
 type Data struct {
 	dataType DataType
 	string   string
+	integer  int
 	array    []Data
 	null     bool
 }
@@ -59,12 +61,14 @@ func (data Data) Flat() (res []string) {
 	case BulkString, String:
 		strData := data.string
 		res = append(res, strData)
+	case Integer:
+		res = append(res, strconv.Itoa(data.integer))
 	}
 	return res
 }
 
 func IsSimple(t DataType) bool {
-	return t == String || t == Error
+	return t == String || t == Error || t == Integer
 }
 
 func (p *Parser) Parse() (*Data, error) {
@@ -89,6 +93,10 @@ func (p *Parser) Parse() (*Data, error) {
 		}
 		err = p.consume('\r', '\n')
 		data.string = value.(string)
+	case Integer:
+		value := p.parseNumber()
+		data.integer = value
+		err = p.consume('\r', '\n')
 	default:
 		err = errors.New(fmt.Sprintf("Unknown type: %s", string(typeHeader.dataType)))
 	}
@@ -189,6 +197,10 @@ func StringData(str string) Data {
 	return Data{dataType: String, string: str}
 }
 
+func IntegerData(integer int) Data {
+	return Data{dataType: Integer, integer: integer}
+}
+
 func BulkStringData(str string) Data {
 	return Data{dataType: BulkString, string: str}
 }
@@ -209,6 +221,8 @@ func (d Data) Marshal() []byte {
 	switch d.dataType {
 	case String, Error:
 		return d.marshalSimple()
+	case Integer:
+		return d.marshalInteger()
 	case BulkString:
 		return d.marshalBulk()
 	case Array:
@@ -228,14 +242,22 @@ func (d Data) marshalSimple() (res []byte) {
 	return
 }
 
+func (d Data) marshalInteger() (res []byte) {
+	res = append(res, byte(d.dataType))
+	value := []byte(strconv.Itoa(d.integer))
+	res = append(res, value...)
+	res = append(res, '\r', '\n')
+	return
+}
+
 func (d Data) marshalBulk() (res []byte) {
 	if d.null {
-		res = append(res, d.marshallTypeHeader(TypeHeader{length: -1, dataType: BulkString})...)
+		res = append(res, d.marshalTypeHeader(TypeHeader{length: -1, dataType: BulkString})...)
 		return
 	}
 
 	value := d.string
-	res = append(res, d.marshallTypeHeader(TypeHeader{length: len(value), dataType: BulkString})...)
+	res = append(res, d.marshalTypeHeader(TypeHeader{length: len(value), dataType: BulkString})...)
 	res = append(res, []byte(value)...)
 	res = append(res, '\r', '\n')
 	return
@@ -243,14 +265,14 @@ func (d Data) marshalBulk() (res []byte) {
 
 func (d Data) marshalArray() (res []byte) {
 	value := d.array
-	res = append(res, d.marshallTypeHeader(TypeHeader{length: len(value), dataType: Array})...)
+	res = append(res, d.marshalTypeHeader(TypeHeader{length: len(value), dataType: Array})...)
 	for _, v := range value {
 		res = append(res, v.Marshal()...)
 	}
 	return
 }
 
-func (d Data) marshallTypeHeader(th TypeHeader) (res []byte) {
+func (d Data) marshalTypeHeader(th TypeHeader) (res []byte) {
 	res = append(res, byte(th.dataType))
 	res = append(res, []byte(strconv.Itoa(th.length))...)
 	res = append(res, '\r', '\n')

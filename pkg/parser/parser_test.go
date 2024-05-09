@@ -3,34 +3,49 @@ package parser
 import (
 	"testing"
 
+	"github.com/codecrafters-io/redis-starter-go/utils"
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestParseArray(t *testing.T) {
-	source := "*2\r\n$4\r\nECHO\r\n$3\r\nABC\r\n"
-	parser := Parser{
-		source:  source,
-		current: 0,
+func TestParse(t *testing.T) {
+	tests := []utils.Test[string, Data]{
+		{Name: "Parse array", Input: "*2\r\n$4\r\nECHO\r\n$3\r\nABC\r\n", Want: Data{
+			dataType: Array,
+			array: []Data{
+				{
+					dataType: BulkString,
+					string:   "ECHO",
+				},
+				{
+					dataType: BulkString,
+					string:   "ABC",
+				},
+			},
+		}},
+		{Name: "Parse integer", Input: ":456\r\n", Want: Data{
+			dataType: Integer,
+			integer:  456,
+		}},
 	}
 
-	data, err := parser.Parse()
+	for _, e := range tests {
+		parser := Parser{
+			source:  e.Input,
+			current: 0,
+		}
 
-	if err != nil {
-		t.Error(err.Error())
-	}
+		data, err := parser.Parse()
 
-	if data.dataType != Array {
-		t.Errorf("Wrong container data type. Have: %d, want: %d (Array)", data.dataType, Array)
-	}
+		if err != nil {
+			t.Error(err.Error())
+		}
 
-	array := data.array
-	if len(array) != 2 {
-		t.Errorf("Wrong array length. Have: %d, want: 2", len(array))
-	}
+		if data.dataType != e.Want.dataType {
+			t.Errorf("Wrong container data type. Have: %d, want: %d", data.dataType, e.Want.dataType)
+		}
 
-	for _, data := range array {
-		if data.dataType != BulkString {
-			t.Errorf("Wrong array content type. Have: %s, want: %s (BulkString)", string(data.dataType), string(BulkString))
+		if !cmp.Equal(*data, e.Want, cmp.AllowUnexported(Data{})) {
+			t.Errorf(e.ToString(*data))
 		}
 	}
 }

@@ -170,6 +170,9 @@ func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 	h.mc.SetReplica(replica)
 }
 
+func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
+}
+
 func RouteReplica(sv Server, replicaContext *ReplicaContext) {
 	replicaHandler := ReplicaHandler{
 		replicaCtx: replicaContext,
