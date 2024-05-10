@@ -85,6 +85,7 @@ func SetAsMaster(server *Server) *MasterContext {
 			return nil
 		}).
 			SetNext(server.CallHandlers).
+			SetNext(ReplOffsetMW).
 			First(),
 	)
 	return &mc
@@ -161,6 +162,12 @@ func GetReplInfo() ReplInfo {
 	return replInfo
 }
 
+func ReplOffsetMW(current *Node, request Request, rw ResponseWriter) error {
+	replInfo.ReplOffset += len(request.Raw)
+	current.Next(request, rw)
+	return nil
+}
+
 func UpdateReplInfo(replId string, replOffset int) {
 	replInfo.ReplId = replId
 	replInfo.ReplOffset = replOffset
@@ -200,11 +207,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			Done: func(ctx context.Context, e *fsm.Event) {
 				sv.SetCallChain(
 					NewNode(sv.CallHandlers).
-						SetNext(func(current *Node, request Request, rw ResponseWriter) error {
-							replInfo.ReplOffset += len(request.Raw)
-							current.Next(request, rw)
-							return nil
-						}).
+						SetNext(ReplOffsetMW).
 						First(),
 				)
 			},
