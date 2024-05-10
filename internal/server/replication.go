@@ -169,6 +169,9 @@ func GetReplInfo() ReplInfo {
 }
 
 func ReplOffsetMW(current *Node, request Request, rw ResponseWriter) error {
+	if request.Command.Type != commands.Write {
+		return nil
+	}
 	replInfo.ReplOffset += len(request.Raw)
 	current.Next(request, rw)
 	return nil
