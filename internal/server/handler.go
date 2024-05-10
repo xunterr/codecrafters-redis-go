@@ -199,7 +199,7 @@ func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
 	replInfo := GetReplInfo()
 	var updatedReplicas int
 	for _, e := range replicas {
-		if e.Offset == replInfo.ReplOffset {
+		if e.Offset >= replInfo.ReplOffset {
 			updatedReplicas++
 		}
 	}
