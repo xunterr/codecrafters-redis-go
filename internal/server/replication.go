@@ -29,6 +29,7 @@ type Replica struct {
 	ServerAddr string
 	Capas      []string
 	IsUp       bool
+	Offset     int
 }
 
 const (
@@ -125,6 +126,12 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) {
 	return repl, nil
 }
 
+func (mc MasterContext) RequestReplicasOffset() {
+	for _, e := range mc.replicas {
+		client.Send(e.Conn, []string{"REPLCONF", "GETACK", "*"})
+	}
+}
+
 func (mc MasterContext) GetReplicas() (res []Replica) {
 	for _, v := range mc.replicas {
 		res = append(res, v)
@@ -133,7 +140,6 @@ func (mc MasterContext) GetReplicas() (res []Replica) {
 }
 
 func (mc *MasterContext) SetReplica(replica Replica) {
-	log.Println("Configuring replica..")
 	mc.replicas[replica.Conn.RemoteAddr().String()] = replica
 }
 

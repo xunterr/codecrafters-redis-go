@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/storage"
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
@@ -14,7 +15,7 @@ import (
 )
 
 type BaseHandler struct {
-	storage storage.Storage
+	storage *storage.Storage
 	server  *Server
 }
 type MasterHandler struct {
@@ -27,7 +28,7 @@ type ReplicaHandler struct {
 	replicaCtx *ReplicaContext
 }
 
-func RouteBasic(server Server, storage storage.Storage) {
+func RouteBasic(server Server, storage *storage.Storage) {
 	handler := BaseHandler{storage: storage, server: &server}
 	server.AddHandler("ECHO", handler.handleEcho)
 	server.AddHandler("SET", handler.handleSet)
@@ -143,6 +144,12 @@ func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
 		repl.ServerAddr = addr
 	} else if capa, ok := req.Command.Options["CAPA"]; ok {
 		repl.Capas = capa
+	} else if offsetStr, ok := req.Command.Options["ACK"]; ok {
+		offset, err := strconv.Atoi(offsetStr[0])
+		if err != nil {
+			return
+		}
+		repl.Offset = offset
 	}
 
 	h.mc.SetReplica(repl)
@@ -172,8 +179,29 @@ func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 }
 
 func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
+	h.mc.RequestReplicasOffset()
+	if len(req.Command.Arguments) != 2 {
+		rw.Write(parser.ErrorData("ERR: Wrong command signature - requires only 2 arguments").Marshal())
+		return
+	}
+
+	duration, err := strconv.Atoi(req.Command.Arguments[1])
+	if err != nil {
+		rw.Write(parser.ErrorData("ERR: Wrong command signature - argument #2 should be an integer").Marshal())
+		return
+	}
+	time.Sleep(time.Duration(duration) * time.Millisecond)
+
 	replicas := h.mc.GetReplicas()
-	rw.Write(parser.IntegerData(len(replicas)).Marshal())
+	replInfo := GetReplInfo()
+	var updatedReplicas int
+	for _, e := range replicas {
+		if e.Offset == replInfo.ReplOffset {
+			updatedReplicas++
+		}
+	}
+
+	rw.Write(parser.IntegerData(updatedReplicas).Marshal())
 }
 
 func RouteReplica(sv Server, replicaContext *ReplicaContext) {

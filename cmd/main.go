@@ -40,7 +40,7 @@ func main() {
 
 	sv := server.NewServer(cmdParser)
 	storage := storage.NewStorage()
-	server.RouteBasic(sv, *storage)
+	server.RouteBasic(sv, storage)
 
 	if MASTER_HOST != "" && len(flag.Args()) > 0 {
 		replicaCtx := server.RegisterReplica(&sv, MASTER_HOST, flag.Arg(0), PORT)
