@@ -142,18 +142,21 @@ func (h MasterHandler) handleReplconf(req Request, rw ResponseWriter) {
 		host := strings.Split(req.Conn.RemoteAddr().String(), ":")[0]
 		addr := fmt.Sprintf("%s:%s", host, lp[0])
 		repl.ServerAddr = addr
+		h.mc.SetReplica(repl)
+		rw.Write(parser.StringData("OK").Marshal())
 	} else if capa, ok := req.Command.Options["CAPA"]; ok {
 		repl.Capas = capa
+		h.mc.SetReplica(repl)
+		rw.Write(parser.StringData("OK").Marshal())
 	} else if offsetStr, ok := req.Command.Options["ACK"]; ok {
 		offset, err := strconv.Atoi(offsetStr[0])
 		if err != nil {
 			return
 		}
 		repl.Offset = offset
+		h.mc.SetReplica(repl)
+		return
 	}
-
-	h.mc.SetReplica(repl)
-	rw.Write(parser.StringData("OK").Marshal())
 }
 
 func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
