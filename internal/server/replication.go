@@ -85,7 +85,13 @@ func SetAsMaster(server *Server) *MasterContext {
 			return nil
 		}).
 			SetNext(server.CallHandlers).
-			SetNext(ReplOffsetMW).
+			SetNext(func(current *Node, request Request, rw ResponseWriter) error {
+				_, isReplica := mc.replicas[request.Conn.RemoteAddr().String()]
+				if !isReplica {
+					return ReplOffsetMW(current, request, rw)
+				}
+				return nil
+			}).
 			First(),
 	)
 	return &mc
