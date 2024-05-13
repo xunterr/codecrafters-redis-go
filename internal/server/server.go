@@ -185,7 +185,6 @@ func (s *Server) Listen(addr string) {
 		go func(c net.Conn) {
 			client, ctx := s.AddClient(c)
 			s.Serve(ctx, client)
-			c.Close()
 		}(c)
 	}
 }
