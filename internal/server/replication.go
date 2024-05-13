@@ -133,10 +133,31 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) {
 	return repl, nil
 }
 
-func (mc MasterContext) RequestReplicasOffset() {
+func (mc MasterContext) UpdateReplicasOffset() map[string]int {
+	offsets := make(map[string]int)
 	for _, e := range mc.replicas {
 		client.Send(e.Conn, []string{"REPLCONF", "GETACK", "*"})
+		res, err := client.Read(e.Conn)
+		if err != nil {
+			log.Printf("Error reading response from replica %s", e.Conn.RemoteAddr().String())
+			continue
+		}
+
+		if len(res[0]) != 3 || res[0][0] != "REPLCONF" || res[0][1] != "ACK" {
+			log.Printf("Unexpected response from replica %s: %v", e.Conn.RemoteAddr().String(), res)
+			continue
+		}
+
+		offset, err := strconv.Atoi(res[0][0])
+		if err != nil {
+			log.Printf("Unexpected response from replica %s: %v", e.Conn.RemoteAddr().String(), res)
+			continue
+		}
+
+		offsets[e.Conn.RemoteAddr().String()] = offset
 	}
+
+	return offsets
 }
 
 func (mc MasterContext) GetReplicas() (res []Replica) {
@@ -230,7 +251,9 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 			return NewBasicResponseWriter(c)
 		}
 	})
-	go sv.Serve(c)
+
+	client, ctx := sv.AddClient(c)
+	go sv.Serve(ctx, client)
 
 	fsm.Event(context.Background(), OnStart)
 	return rc

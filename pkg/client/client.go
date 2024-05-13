@@ -2,7 +2,6 @@ package client
 
 import (
 	"errors"
-	"log"
 	"net"
 
 	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
@@ -29,7 +28,6 @@ func Read(c net.Conn) ([][]string, error) {
 	var res [][]string
 	buff := make([]byte, 1024)
 	ln, err := c.Read(buff)
-	log.Printf("Received data: %s", string(buff[:ln]))
 	if err != nil {
 		return nil, err
 	}

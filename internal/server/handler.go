@@ -19,7 +19,7 @@ type BaseHandler struct {
 	server  *Server
 }
 type MasterHandler struct {
-	server   Server
+	server   *Server
 	mc       *MasterContext
 	sessions map[string]Replica
 }
@@ -28,8 +28,8 @@ type ReplicaHandler struct {
 	replicaCtx *ReplicaContext
 }
 
-func RouteBasic(server Server, storage *storage.Storage) {
-	handler := BaseHandler{storage: storage, server: &server}
+func RouteBasic(server *Server, storage *storage.Storage) {
+	handler := BaseHandler{storage: storage, server: server}
 	server.AddHandler("ECHO", handler.handleEcho)
 	server.AddHandler("SET", handler.handleSet)
 	server.AddHandler("GET", handler.handleGet)
@@ -121,7 +121,7 @@ func (h BaseHandler) handleInfo(req Request, rw ResponseWriter) {
 	io.WriteString(req.Conn, resStr)
 }
 
-func RouteMaster(server Server, mc *MasterContext) {
+func RouteMaster(server *Server, mc *MasterContext) {
 	handler := MasterHandler{server, mc, map[string]Replica{}}
 	server.AddHandler("REPLCONF", handler.handleReplconf)
 	server.AddHandler("PSYNC", handler.handlePsync)
@@ -179,12 +179,20 @@ func (h MasterHandler) handlePsync(req Request, rw ResponseWriter) {
 	rw.Write([]byte(fmt.Sprintf("$%d\r\n%s", len(rdb), string(rdb))))
 	replica.IsUp = true
 	h.mc.SetReplica(replica)
+
+	h.server.StopHandling(replica.Conn) //exit handling loop, handshake is ended - no more commands expected. WIP
 }
 
 func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
-	h.mc.RequestReplicasOffset()
+
 	if len(req.Command.Arguments) != 2 {
 		rw.Write(parser.ErrorData("ERR: Wrong command signature - requires only 2 arguments").Marshal())
+		return
+	}
+
+	replNum, err := strconv.Atoi(req.Command.Arguments[0])
+	if err != nil {
+		rw.Write(parser.ErrorData("ERR: Wrong command signature - argument #2 should be an integer").Marshal())
 		return
 	}
 
@@ -193,21 +201,32 @@ func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
 		rw.Write(parser.ErrorData("ERR: Wrong command signature - argument #2 should be an integer").Marshal())
 		return
 	}
-	time.Sleep(time.Duration(duration) * time.Millisecond)
 
-	replicas := h.mc.GetReplicas()
-	replInfo := GetReplInfo()
-	var updatedReplicas int
-	for _, e := range replicas {
-		if e.Offset >= replInfo.ReplOffset {
-			updatedReplicas++
+	replicasDone := 0
+	timeout := time.After(time.Duration(duration) * time.Millisecond)
+	ping := time.After(100 * time.Millisecond)
+
+	select {
+	case <-timeout:
+		break
+	case <-ping:
+		offsets := h.mc.UpdateReplicasOffset()
+		offsetsMatch := 0
+
+		for _, offset := range offsets {
+			if offset >= replInfo.ReplOffset {
+				offsetsMatch++
+			}
+		}
+		if replNum == replNum {
+			replicasDone = offsetsMatch
+			break
 		}
 	}
-
-	rw.Write(parser.IntegerData(updatedReplicas).Marshal())
+	rw.Write(parser.IntegerData(replicasDone).Marshal())
 }
 
-func RouteReplica(sv Server, replicaContext *ReplicaContext) {
+func RouteReplica(sv *Server, replicaContext *ReplicaContext) {
 	replicaHandler := ReplicaHandler{
 		replicaCtx: replicaContext,
 	}

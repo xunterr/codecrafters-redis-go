@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
+	"sync"
 
 	"net"
 	"os"
@@ -27,6 +29,14 @@ type Server struct {
 	callChain  *Node
 	cmdParser  commands.CommandParser
 	rwProvider func(c net.Conn) ResponseWriter
+	mu         sync.RWMutex
+	clients    map[string]Client
+}
+
+type Client struct {
+	conn         net.Conn
+	requests     chan Request
+	stopHandling context.CancelFunc
 }
 
 type Request struct {
@@ -118,21 +128,43 @@ func (n *Node) Next(req Request, rw ResponseWriter) error {
 	return n.next.Call(req, rw)
 }
 
-func NewServer(cmdParser commands.CommandParser) Server {
+func NewServer(cmdParser commands.CommandParser) *Server {
 	sv := Server{
 		handlers:  map[string]HandlerFunc{},
 		cmdParser: cmdParser,
 		rwProvider: func(c net.Conn) ResponseWriter {
 			return NewBasicResponseWriter(c)
 		},
+		clients: make(map[string]Client),
 	}
 
 	sv.SetCallChain(NewNode(sv.CallHandlers))
-	return sv
+	return &sv
 }
 
 func (s *Server) SetCallChain(first *Node) {
 	s.callChain = first
+}
+
+func (s *Server) AddClient(c net.Conn) (Client, context.Context) {
+	s.mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	client := Client{
+		conn:         c,
+		stopHandling: cancel,
+		requests:     make(chan Request),
+	}
+	s.clients[c.RemoteAddr().String()] = client
+	s.mu.Unlock()
+	return client, ctx
+}
+
+func (s *Server) StopHandling(c net.Conn) {
+	s.mu.Lock()
+	client := s.clients[c.RemoteAddr().String()]
+	client.stopHandling()
+	delete(s.clients, c.RemoteAddr().String())
+	s.mu.Unlock()
 }
 
 func (s *Server) Listen(addr string) {
@@ -151,11 +183,11 @@ func (s *Server) Listen(addr string) {
 		log.Printf("Accepted: %s", c.RemoteAddr().String())
 
 		go func(c net.Conn) {
-			s.Serve(c)
+			client, ctx := s.AddClient(c)
+			s.Serve(ctx, client)
 			c.Close()
 		}(c)
 	}
-
 }
 
 func (s *Server) AddHandler(name string, handler HandlerFunc) {
@@ -166,7 +198,7 @@ func (s *Server) SetRwProvider(rwProvider func(c net.Conn) ResponseWriter) {
 	s.rwProvider = rwProvider
 }
 
-func (s Server) CallHandlers(current *Node, req Request, rw ResponseWriter) error {
+func (s *Server) CallHandlers(current *Node, req Request, rw ResponseWriter) error {
 	handler, ok := s.handlers[req.Command.Name]
 	if ok {
 		handler(req, rw)
@@ -175,20 +207,25 @@ func (s Server) CallHandlers(current *Node, req Request, rw ResponseWriter) erro
 	return nil
 }
 
-func (s *Server) Serve(c net.Conn) {
+func (s *Server) Serve(ctx context.Context, client Client) {
 	buf := make([]byte, 4096)
 	for {
-		ln, err := c.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("Error reading request: %s", err.Error())
-				msg := parser.ErrorData("Error reading request!").Marshal()
-				io.WriteString(c, string(msg))
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			ln, err := client.conn.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("Error reading request: %s", err.Error())
+					msg := parser.ErrorData("Error reading request!").Marshal()
+					io.WriteString(client.conn, string(msg))
+				}
+				break
 			}
-			break
+			log.Printf("[%s]: %q", client.conn.RemoteAddr().String(), string(buf[:ln]))
+			s.route(client.conn, string(buf[:ln]))
 		}
-		log.Printf("[%s]: %q", c.RemoteAddr().String(), string(buf[:ln]))
-		s.route(c, string(buf[:ln]))
 	}
 }
 
