@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/server"
@@ -16,12 +17,12 @@ import (
 
 var (
 	PORT        = 6379
-	MASTER_HOST = ""
+	MASTER_ADDR = ""
 )
 
 func init() {
 	flag.IntVar(&PORT, "port", PORT, "Port number")
-	flag.StringVar(&MASTER_HOST, "replicaof", MASTER_HOST, "Master server address and port: <host port> (should be the last argument)")
+	flag.StringVar(&MASTER_ADDR, "replicaof", MASTER_ADDR, "Master server address and port: \"<host port>\"")
 }
 
 func main() {
@@ -44,8 +45,13 @@ func main() {
 	storage := storage.NewStorage()
 	server.RouteBasic(sv, storage)
 
-	if MASTER_HOST != "" && len(flag.Args()) > 0 {
-		replicaCtx := server.RegisterReplica(sv, MASTER_HOST, flag.Arg(0), PORT)
+	if MASTER_ADDR != "" {
+		masterAddr := strings.Split(MASTER_ADDR, " ")
+		if len(masterAddr) != 2 {
+			log.Fatalln("<MASTER_ADDR> parameter should contain address and port")
+			return
+		}
+		replicaCtx := server.RegisterReplica(sv, masterAddr[0], masterAddr[1], PORT)
 		server.RouteReplica(sv, replicaCtx)
 	} else {
 		mc := server.SetAsMaster(sv)
