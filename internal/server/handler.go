@@ -216,7 +216,6 @@ func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
 	for range ping.C {
 		select {
 		case <-ctx.Done():
-			println("hereeesfdojsld")
 			rw.Write(parser.IntegerData(replicasDone).Marshal())
 			return
 		default:

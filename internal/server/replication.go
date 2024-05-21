@@ -90,7 +90,7 @@ func SetAsMaster(server *Server) *MasterContext {
 			SetNext(server.CallHandlers).
 			SetNext(func(current *Node, request Request, rw ResponseWriter) error {
 				_, isReplica := mc.replicas[request.Conn.RemoteAddr().String()]
-				if !isReplica {
+				if !isReplica || request.Command.Type == commands.Write {
 					return ReplOffsetMW(current, request, rw)
 				}
 				return nil
