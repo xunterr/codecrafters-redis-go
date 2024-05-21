@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
@@ -56,7 +57,8 @@ type ReplicaContext struct {
 }
 
 type MasterContext struct {
-	replicas map[string]Replica
+	connHandler *ConnectionHandler
+	replicas    map[string]Replica
 }
 
 const (
@@ -72,7 +74,8 @@ func SetAsMaster(server *Server) *MasterContext {
 	}
 
 	mc := MasterContext{
-		make(map[string]Replica),
+		replicas:    make(map[string]Replica),
+		connHandler: server.connHandler,
 	}
 	go mc.HealthCheck()
 
@@ -133,31 +136,56 @@ func (mc MasterContext) GetReplica(c net.Conn) (Replica, error) {
 	return repl, nil
 }
 
-func (mc MasterContext) UpdateReplicasOffset() map[string]int {
+func (mc MasterContext) UpdateReplicasOffset(ctx context.Context) map[string]int {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	offsets := make(map[string]int)
 	for _, e := range mc.replicas {
-		client.Send(e.Conn, []string{"REPLCONF", "GETACK", "*"})
-		res, err := client.Read(e.Conn)
-		if err != nil {
-			log.Printf("Error reading response from replica %s", e.Conn.RemoteAddr().String())
-			continue
-		}
+		wg.Add(1)
+		go func(e Replica) {
+			defer wg.Done()
+			offset, err := mc.FetchReplicaOffset(ctx, e)
+			if err != nil {
+				log.Printf("Failed to fetch offset for the replica (%s): %s", e.Conn.RemoteAddr().String(), err.Error())
+				return
+			}
 
-		if len(res[0]) != 3 || res[0][0] != "REPLCONF" || res[0][1] != "ACK" {
-			log.Printf("Unexpected response from replica %s: %v", e.Conn.RemoteAddr().String(), res)
-			continue
-		}
-
-		offset, err := strconv.Atoi(res[0][0])
-		if err != nil {
-			log.Printf("Unexpected response from replica %s: %v", e.Conn.RemoteAddr().String(), res)
-			continue
-		}
-
-		offsets[e.Conn.RemoteAddr().String()] = offset
+			mu.Lock()
+			offsets[e.Conn.RemoteAddr().String()] = offset
+			mu.Unlock()
+		}(e)
 	}
 
+	println("waiting")
+	wg.Wait()
+	println("waited")
 	return offsets
+}
+
+func (mc MasterContext) FetchReplicaOffset(ctx context.Context, replica Replica) (int, error) {
+	client.Send(replica.Conn, []string{"REPLCONF", "GETACK", "*"})
+	messages := mc.connHandler.GetMessages(replica.Conn.RemoteAddr().String())
+	println("here")
+	select {
+	case <-ctx.Done():
+		return -1, errors.New("Hit a timeout while reaching replica. Check replica's health.")
+	case msg, ok := <-messages:
+		println("here2")
+		if !ok {
+			return -1, errors.New("Messages channel is closed. Check replica's health.")
+		}
+
+		offsetStr, ok := msg.Command.Options["ACK"]
+		if msg.Command.Name != "REPLCONF" || !ok {
+			return -1, errors.New(fmt.Sprintf("Unexpected response from the replica %s -- %s", replica.Conn.RemoteAddr().String(), string(msg.Raw)))
+		}
+
+		offset, err := strconv.Atoi(offsetStr[0])
+		if err != nil {
+			return -1, errors.New(fmt.Sprintf("Unexpected response from the replica %s -- %s", replica.Conn.RemoteAddr().String(), string(msg.Raw)))
+		}
+		return offset, nil
+	}
 }
 
 func (mc MasterContext) GetReplicas() (res []Replica) {
@@ -252,7 +280,7 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 		}
 	})
 
-	client, ctx := sv.AddClient(c)
+	client, ctx := sv.AddClient(context.Background(), c)
 	go sv.Serve(ctx, client)
 
 	fsm.Event(context.Background(), OnStart)

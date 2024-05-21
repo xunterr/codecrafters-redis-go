@@ -2,16 +2,11 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"sync"
 
 	"net"
-	"os"
-
-	"github.com/codecrafters-io/redis-starter-go/internal/commands"
-	"github.com/codecrafters-io/redis-starter-go/pkg/parser"
 )
 
 type HandlerFunc func(req Request, rw ResponseWriter)
@@ -25,24 +20,24 @@ type Node struct {
 }
 
 type Server struct {
-	handlers   map[string]HandlerFunc
-	callChain  *Node
-	cmdParser  commands.CommandParser
-	rwProvider func(c net.Conn) ResponseWriter
-	mu         sync.RWMutex
-	clients    map[string]Client
+	handlers    map[string]HandlerFunc
+	callChain   *Node
+	connHandler *ConnectionHandler
+	rwProvider  func(c net.Conn) ResponseWriter
+	mu          sync.RWMutex
+	clients     map[string]Client
+	quit        chan struct{}
 }
 
 type Client struct {
 	conn         net.Conn
-	requests     chan Request
+	messages     chan Message
 	stopHandling context.CancelFunc
 }
 
 type Request struct {
-	Conn    net.Conn
-	Raw     []byte
-	Command *commands.Command
+	Conn net.Conn
+	Message
 }
 
 type ResponseWriter interface {
@@ -128,14 +123,15 @@ func (n *Node) Next(req Request, rw ResponseWriter) error {
 	return n.next.Call(req, rw)
 }
 
-func NewServer(cmdParser commands.CommandParser) *Server {
+func NewServer(connHandler *ConnectionHandler) *Server {
 	sv := Server{
-		handlers:  map[string]HandlerFunc{},
-		cmdParser: cmdParser,
+		handlers:    map[string]HandlerFunc{},
+		connHandler: connHandler,
 		rwProvider: func(c net.Conn) ResponseWriter {
 			return NewBasicResponseWriter(c)
 		},
 		clients: make(map[string]Client),
+		quit:    make(chan struct{}),
 	}
 
 	sv.SetCallChain(NewNode(sv.CallHandlers))
@@ -146,17 +142,17 @@ func (s *Server) SetCallChain(first *Node) {
 	s.callChain = first
 }
 
-func (s *Server) AddClient(c net.Conn) (Client, context.Context) {
+func (s *Server) AddClient(ctx context.Context, c net.Conn) (Client, context.Context) {
+	clientCtx, cancel := context.WithCancel(ctx)
 	s.mu.Lock()
-	ctx, cancel := context.WithCancel(context.Background())
 	client := Client{
 		conn:         c,
 		stopHandling: cancel,
-		requests:     make(chan Request),
+		messages:     s.connHandler.InitNewConn(c),
 	}
 	s.clients[c.RemoteAddr().String()] = client
 	s.mu.Unlock()
-	return client, ctx
+	return client, clientCtx
 }
 
 func (s *Server) StopHandling(c net.Conn) {
@@ -167,24 +163,37 @@ func (s *Server) StopHandling(c net.Conn) {
 	s.mu.Unlock()
 }
 
-func (s *Server) Listen(addr string) {
-	l, err := net.Listen("tcp", addr)
+func (s *Server) Listen(ctx context.Context, addr string) {
+	var lc net.ListenConfig
+	l, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		log.Printf("Failed to bind to %s", addr)
-		os.Exit(1)
+		return
 	}
+
+	go func() {
+		<-ctx.Done()
+		close(s.quit)
+		log.Println("Shutting service down...")
+		l.Close()
+	}()
 
 	for {
 		c, err := l.Accept()
 		if err != nil {
-			log.Printf("Error accepting connection: %s", err.Error())
-			os.Exit(1)
+			select {
+			case <-s.quit:
+				return
+			default:
+				log.Printf("Error accepting connection: %s", err.Error())
+				continue
+			}
 		}
 		log.Printf("Accepted: %s", c.RemoteAddr().String())
 
 		go func(c net.Conn) {
-			client, ctx := s.AddClient(c)
-			s.Serve(ctx, client)
+			client, clientCtx := s.AddClient(ctx, c)
+			s.Serve(clientCtx, client)
 		}(c)
 	}
 }
@@ -207,52 +216,20 @@ func (s *Server) CallHandlers(current *Node, req Request, rw ResponseWriter) err
 }
 
 func (s *Server) Serve(ctx context.Context, client Client) {
-	buf := make([]byte, 4096)
+	go s.connHandler.Handle(context.Background(), client.conn, client.messages)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-			ln, err := client.conn.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("Error reading request: %s", err.Error())
-					msg := parser.ErrorData("Error reading request!").Marshal()
-					io.WriteString(client.conn, string(msg))
-				}
-				break
+		case msg := <-client.messages:
+			log.Printf("[%s]: %q", client.conn.RemoteAddr().String(), msg.Raw)
+			req := Request{
+				Conn:    client.conn,
+				Message: msg,
 			}
-			log.Printf("[%s]: %q", client.conn.RemoteAddr().String(), string(buf[:ln]))
-			s.route(client.conn, string(buf[:ln]))
+			rw := s.rwProvider(client.conn)
+			s.callChain.Call(req, rw)
+			rw.Release()
 		}
-	}
-}
-
-func (s *Server) route(c net.Conn, input string) {
-	p := parser.NewParser(input)
-	for !p.IsAtEnd() {
-		parsed, err := p.Parse()
-		if parsed == nil {
-			msg := fmt.Sprintf("Error parsing RESP: %s", err.Error())
-			log.Println(msg)
-			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			return
-		}
-
-		command, err := s.cmdParser.ParseCommand(parsed.Flat())
-		if err != nil {
-			msg := fmt.Sprintf("Error parsing command: %s", err.Error())
-			io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-			continue
-		}
-
-		req := Request{
-			Conn:    c,
-			Raw:     parsed.Marshal(),
-			Command: &command,
-		}
-		rw := s.rwProvider(c)
-		s.callChain.Call(req, rw)
-		rw.Release()
 	}
 }

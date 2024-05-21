@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
@@ -37,8 +39,8 @@ func main() {
 	}
 
 	cmdParser := commands.NewCommandParser(table)
-
-	sv := server.NewServer(cmdParser)
+	connHandler := server.NewConnectionHandler(cmdParser)
+	sv := server.NewServer(connHandler)
 	storage := storage.NewStorage()
 	server.RouteBasic(sv, storage)
 
@@ -49,5 +51,7 @@ func main() {
 		mc := server.SetAsMaster(sv)
 		server.RouteMaster(sv, mc)
 	}
-	sv.Listen(fmt.Sprintf(":%d", PORT))
+
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
+	sv.Listen(ctx, fmt.Sprintf(":%d", PORT))
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -203,27 +204,34 @@ func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
 	}
 
 	replicasDone := 0
-	timeout := time.After(time.Duration(duration) * time.Millisecond)
-	ping := time.After(100 * time.Millisecond)
+	ping := time.NewTicker(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(duration)*time.Millisecond)
+	defer cancel()
 
-	select {
-	case <-timeout:
-		break
-	case <-ping:
-		offsets := h.mc.UpdateReplicasOffset()
-		offsetsMatch := 0
+	for range ping.C {
+		select {
+		case <-ctx.Done():
+			println("hereeesfdojsld")
+			rw.Write(parser.IntegerData(replicasDone).Marshal())
+			return
+		default:
+			offsets := h.mc.UpdateReplicasOffset(ctx)
+			offsetsMatch := 0
 
-		for _, offset := range offsets {
-			if offset >= replInfo.ReplOffset {
-				offsetsMatch++
+			for _, offset := range offsets {
+				if offset >= replInfo.ReplOffset {
+					offsetsMatch++
+				}
+			}
+			replicasDone = offsetsMatch
+			if offsetsMatch == replNum {
+				rw.Write(parser.IntegerData(offsetsMatch).Marshal())
+				return
 			}
 		}
-		if replNum == replNum {
-			replicasDone = offsetsMatch
-			break
-		}
+
 	}
-	rw.Write(parser.IntegerData(replicasDone).Marshal())
+	rw.Write(parser.NullBulkStringData().Marshal())
 }
 
 func RouteReplica(sv *Server, replicaContext *ReplicaContext) {
