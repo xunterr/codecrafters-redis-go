@@ -203,6 +203,11 @@ func (h MasterHandler) handleWait(req Request, rw ResponseWriter) {
 		return
 	}
 
+	if GetReplInfo().ReplOffset == 0 {
+		log.Println("No previous write commands, skipping")
+		rw.Write(parser.IntegerData(len(h.mc.GetReplicas())).Marshal())
+		return
+	}
 	replicasDone := 0
 	ping := time.NewTicker(100 * time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(duration)*time.Millisecond)
