@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/codecrafters-io/redis-starter-go/utils"
@@ -53,7 +52,6 @@ func (d Data) ToMap() (out map[string]any, err error) {
 }
 
 func (data Data) Flat() (res []string) {
-	log.Printf("%v", data)
 	switch data.dataType {
 	case Array:
 		arrData := data.array

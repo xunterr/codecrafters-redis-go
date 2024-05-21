@@ -156,21 +156,17 @@ func (mc MasterContext) UpdateReplicasOffset(ctx context.Context) map[string]int
 		}(e)
 	}
 
-	println("waiting")
 	wg.Wait()
-	println("waited")
 	return offsets
 }
 
 func (mc MasterContext) FetchReplicaOffset(ctx context.Context, replica Replica) (int, error) {
 	client.Send(replica.Conn, []string{"REPLCONF", "GETACK", "*"})
 	messages := mc.connHandler.GetMessages(replica.Conn.RemoteAddr().String())
-	println("here")
 	select {
 	case <-ctx.Done():
 		return -1, errors.New("Hit a timeout while reaching replica. Check replica's health.")
 	case msg, ok := <-messages:
-		println("here2")
 		if !ok {
 			return -1, errors.New("Messages channel is closed. Check replica's health.")
 		}
@@ -218,9 +214,6 @@ func GetReplInfo() ReplInfo {
 }
 
 func ReplOffsetMW(current *Node, request Request, rw ResponseWriter) error {
-	if request.Command.Type != commands.Write {
-		return nil
-	}
 	replInfo.ReplOffset += len(request.Raw)
 	current.Next(request, rw)
 	return nil
