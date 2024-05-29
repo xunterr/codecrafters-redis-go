@@ -50,8 +50,8 @@ const (
 )
 
 type ReplicaContext struct {
+	ListeningPort int
 	server        *Server
-	listeningPort int
 	masterConn    net.Conn
 	handshakeFsm  *fsm.FSM
 }
@@ -66,7 +66,7 @@ const (
 	Slave  ServerRole = "slave"
 )
 
-func SetAsMaster(server *Server) *MasterContext {
+func NewMaster(connHandler *ConnectionHandler) *MasterContext {
 	replInfo = ReplInfo{
 		Role:       Master,
 		ReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
@@ -75,29 +75,30 @@ func SetAsMaster(server *Server) *MasterContext {
 
 	mc := MasterContext{
 		replicas:    make(map[string]Replica),
-		connHandler: server.connHandler,
+		connHandler: connHandler,
 	}
 	go mc.HealthCheck()
 
-	server.SetCallChain(
-		NewNode(func(current *Node, request Request, rw ResponseWriter) error {
-			if request.Command.Type == commands.Write {
-				mc.Propagate(request.Raw)
+	return &mc
+}
+
+func (mc MasterContext) MasterCallChain(server *Server) *Node {
+	return NewNode(func(current *Node, request Request, rw ResponseWriter) error {
+		if request.Command.Type == commands.Write {
+			mc.Propagate(request.Raw)
+		}
+		current.Next(request, rw)
+		return nil
+	}).
+		SetNext(server.CallHandlers).
+		SetNext(func(current *Node, request Request, rw ResponseWriter) error {
+			_, isReplica := mc.replicas[request.Conn.RemoteAddr().String()]
+			if !isReplica && request.Command.Type == commands.Write {
+				return ReplOffsetMW(current, request, rw)
 			}
-			current.Next(request, rw)
 			return nil
 		}).
-			SetNext(server.CallHandlers).
-			SetNext(func(current *Node, request Request, rw ResponseWriter) error {
-				_, isReplica := mc.replicas[request.Conn.RemoteAddr().String()]
-				if !isReplica && request.Command.Type == commands.Write {
-					return ReplOffsetMW(current, request, rw)
-				}
-				return nil
-			}).
-			First(),
-	)
-	return &mc
+		First()
 }
 
 func (mc *MasterContext) HealthCheck() {
@@ -224,24 +225,27 @@ func UpdateReplInfo(replId string, replOffset int) {
 	replInfo.ReplOffset = replOffset
 }
 
-func RegisterReplica(sv *Server, host string, port string, listeningPort int) *ReplicaContext {
+func NewReplica(sv *Server, c net.Conn, listeningPort int) (*ReplicaContext, error) {
 	rc := &ReplicaContext{
+		ListeningPort: listeningPort,
 		server:        sv,
-		listeningPort: listeningPort,
+		masterConn:    c,
 	}
+	rc.setHandshakeFsm()
 
 	replInfo = ReplInfo{
 		Role: Slave,
 	}
 
-	c, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
-	if err != nil {
-		log.Fatalf("Error connecting to the master: %s", err.Error())
-		return nil
-	}
-	rc.masterConn = c
+	return rc, nil
+}
 
-	fsm := fsm.NewFSM(
+func (rc *ReplicaContext) InitHandshake() {
+	rc.handshakeFsm.Event(context.Background(), OnStart)
+}
+
+func (rc *ReplicaContext) setHandshakeFsm() {
+	rc.handshakeFsm = fsm.NewFSM(
 		None,
 		fsm.Events{
 			{Name: OnStart, Src: []string{None}, Dst: Ping},
@@ -252,35 +256,25 @@ func RegisterReplica(sv *Server, host string, port string, listeningPort int) *R
 		},
 		fsm.Callbacks{
 			Ping:         func(_ context.Context, e *fsm.Event) { pingMaster(rc.masterConn) },
-			ReplconfLP:   func(_ context.Context, e *fsm.Event) { setListeningPort(rc.masterConn, listeningPort) },
+			ReplconfLP:   func(_ context.Context, e *fsm.Event) { setListeningPort(rc.masterConn, rc.ListeningPort) },
 			ReplconfCapa: func(_ context.Context, e *fsm.Event) { setCapabilities(rc.masterConn) },
 			Psync:        func(_ context.Context, e *fsm.Event) { psync(rc.masterConn) },
 			Done: func(ctx context.Context, e *fsm.Event) {
-				sv.SetCallChain(
-					NewNode(sv.CallHandlers).
+				rc.server.SetCallChain(
+					NewNode(rc.server.CallHandlers).
 						SetNext(ReplOffsetMW).
 						First(),
 				)
 			},
 		})
-	rc.handshakeFsm = fsm
-
-	sv.SetRwProvider(func(c net.Conn) ResponseWriter {
-		if c == rc.masterConn {
-			return SilentResponseWriter{}
-		} else {
-			return NewBasicResponseWriter(c)
-		}
-	})
-
-	client, ctx := sv.AddClient(context.Background(), c)
-	go sv.Serve(ctx, client)
-
-	fsm.Event(context.Background(), OnStart)
-	return rc
 }
 
-func (rc ReplicaContext) onHandshakeEnd(server *Server) {
+func (rc ReplicaContext) ReplicaRwProvider(c net.Conn) ResponseWriter {
+	if c == rc.masterConn {
+		return SilentResponseWriter{}
+	} else {
+		return NewBasicResponseWriter(c)
+	}
 }
 
 func (rc ReplicaContext) Event(name string) error {

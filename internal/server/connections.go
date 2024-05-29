@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -59,31 +58,40 @@ func (ch ConnectionHandler) Handle(ctx context.Context, c net.Conn, messages cha
 				}
 				break
 			}
-			p := parser.NewParser(string(buf[:ln]))
-			for !p.IsAtEnd() {
-				parsed, err := p.Parse()
+
+			ch.forMessage(string(buf[:ln]), func(m Message, err error) {
 				if err != nil {
 					log.Println(err.Error())
+					io.WriteString(c, string(parser.ErrorData(err.Error()).Marshal()))
+				} else {
+					messages <- m
 				}
-				if parsed == nil {
-					msg := fmt.Sprintf("ERR: Error parsing RESP: %s", err.Error())
-					log.Println(msg)
-					io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-					return
-				}
-
-				command, err := ch.cmdParser.ParseCommand(parsed.Flat())
-				if err != nil {
-					msg := fmt.Sprintf("ERR: Error parsing command: %s", err.Error())
-					io.WriteString(c, string(parser.ErrorData(msg).Marshal()))
-					continue
-				}
-
-				messages <- Message{
-					Raw:     []byte(parsed.Marshal()),
-					Command: &command,
-				}
-			}
+			})
 		}
+	}
+}
+
+func (ch ConnectionHandler) forMessage(from string, do func(Message, error)) {
+	p := parser.NewParser(from)
+	for !p.IsAtEnd() {
+		parsed, err := p.Parse()
+		if err != nil {
+			log.Println(err.Error())
+		}
+		if parsed == nil {
+			do(Message{}, err)
+			return
+		}
+
+		command, err := ch.cmdParser.ParseCommand(parsed.Flat())
+		if err != nil {
+			do(Message{}, err)
+			continue
+		}
+
+		do(Message{
+			Raw:     []byte(parsed.Marshal()),
+			Command: &command,
+		}, nil)
 	}
 }

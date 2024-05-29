@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -46,18 +47,44 @@ func main() {
 	server.RouteBasic(sv, storage)
 
 	if MASTER_ADDR != "" {
-		masterAddr := strings.Split(MASTER_ADDR, " ")
-		if len(masterAddr) != 2 {
-			log.Fatalln("<MASTER_ADDR> parameter should contain address and port")
-			return
-		}
-		replicaCtx := server.RegisterReplica(sv, masterAddr[0], masterAddr[1], PORT)
-		server.RouteReplica(sv, replicaCtx)
+		StartAsReplica(sv)
 	} else {
-		mc := server.SetAsMaster(sv)
-		server.RouteMaster(sv, mc)
+		StartAsMaster(sv, connHandler)
 	}
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
 	sv.Listen(ctx, fmt.Sprintf(":%d", PORT))
+}
+
+func StartAsReplica(sv *server.Server) {
+	masterAddr := strings.Split(MASTER_ADDR, " ")
+	if len(masterAddr) != 2 {
+		log.Fatalln("<MASTER_ADDR> parameter should contain address and port")
+		return
+	}
+
+	c, err := net.Dial("tcp", fmt.Sprintf("%s:%s", masterAddr[0], masterAddr[1]))
+	if err != nil {
+		log.Fatalln(err.Error())
+		return
+	}
+
+	replicaCtx, err := server.NewReplica(sv, c, PORT)
+	if err != nil {
+		log.Fatalln(err.Error())
+		return
+	}
+
+	sv.SetRwProvider(replicaCtx.ReplicaRwProvider)
+	server.RouteReplica(sv, replicaCtx)
+	client, ctx := sv.AddClient(context.Background(), c)
+	go sv.Serve(ctx, client)
+
+	replicaCtx.InitHandshake()
+}
+
+func StartAsMaster(sv *server.Server, connHandler *server.ConnectionHandler) {
+	mc := server.NewMaster(connHandler)
+	sv.SetCallChain(mc.MasterCallChain(sv))
+	server.RouteMaster(sv, mc)
 }
